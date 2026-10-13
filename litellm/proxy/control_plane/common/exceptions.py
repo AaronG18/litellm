@@ -1,6 +1,7 @@
 """RFC 9457 error bodies for the control plane, same contract as /management/v1."""
 
 from collections.abc import Mapping
+from http import HTTPStatus
 from types import MappingProxyType
 from typing import Final
 
@@ -23,6 +24,10 @@ def error_body(slug: str, title: str, status: int, detail: str) -> ErrorBody:
     return ErrorBody(type=f"{ERROR_TYPE_BASE}{slug}", title=title, status=status, detail=detail)
 
 
+def bad_request(detail: str) -> ErrorBody:
+    return error_body("bad-request", "Bad Request", HTTPStatus.BAD_REQUEST, detail)
+
+
 def unauthorized(detail: str) -> ErrorBody:
     return error_body("unauthorized", "Unauthorized", 401, detail)
 
@@ -39,6 +44,14 @@ def too_many_requests(detail: str) -> ErrorBody:
     return error_body("too-many-requests", "Too Many Requests", 429, detail)
 
 
+def bad_gateway(detail: str) -> ErrorBody:
+    return error_body("bad-gateway", "Bad Gateway", 502, detail)
+
+
+def service_unavailable(detail: str) -> ErrorBody:
+    return error_body("service-unavailable", "Service Unavailable", 503, detail)
+
+
 class ControlPlaneException(Exception):
     """An error raised from a dependency or handler, rendered by the app-level handler below."""
 
@@ -46,10 +59,6 @@ class ControlPlaneException(Exception):
         self.body = body
         self.headers = MappingProxyType(dict(headers))
         super().__init__(body.detail)
-
-
-def bad_gateway(detail: str) -> ErrorBody:
-    return error_body("bad-gateway", "Bad Gateway", 502, detail)
 
 
 def _render(body: ErrorBody) -> JSONResponse:
