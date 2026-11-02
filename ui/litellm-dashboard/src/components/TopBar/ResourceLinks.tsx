@@ -2,6 +2,8 @@
 
 import { useDisableBlogPosts } from "@/app/(dashboard)/hooks/useDisableBlogPosts";
 import { useDisableShowPrompts } from "@/app/(dashboard)/hooks/useDisableShowPrompts";
+import { useBlogPosts } from "@/app/(dashboard)/hooks/blogPosts/useBlogPosts";
+import { Separator } from "@/components/ui/separator";
 import { DOCS_URL } from "@/components/Navbar/DocsLink/DocsLink";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -20,6 +22,7 @@ import { BookOpen, CircleHelp, Github, Newspaper, ScrollText, Slack, type Lucide
 interface ResourceLink {
   href: string;
   label: string;
+  short?: string;
   Icon: LucideIcon | typeof DiscordIcon;
 }
 
@@ -32,12 +35,12 @@ function DiscordIcon({ className }: { className?: string }) {
 }
 
 const PRODUCT_LINKS: readonly ResourceLink[] = [
-  { href: DOCS_URL, label: "Documentation", Icon: BookOpen },
+  { href: DOCS_URL, label: "Documentation", short: "Docs", Icon: BookOpen },
   { href: "https://docs.litellm.ai/release_notes", label: "Release notes", Icon: ScrollText },
 ];
 const BLOG_LINK: ResourceLink = { href: "https://docs.litellm.ai/blog", label: "Blog", Icon: Newspaper };
 const COMMUNITY_LINKS: readonly ResourceLink[] = [
-  { href: "https://www.litellm.ai/support", label: "Slack community", Icon: Slack },
+  { href: "https://www.litellm.ai/support", label: "Slack community", short: "Slack", Icon: Slack },
   { href: "https://discord.gg/wuPM9dRgDw", label: "Discord", Icon: DiscordIcon },
   { href: "https://github.com/BerriAI/litellm", label: "GitHub", Icon: Github },
 ];
@@ -109,13 +112,20 @@ export function ResourceList() {
   );
 }
 
-export function InlineResourceLinks({ className }: { className?: string }) {
+export function InlineResourceLinks({
+  className,
+  textLinks: showText = true,
+}: {
+  className?: string;
+  textLinks?: boolean;
+}) {
   const hideBlog = useDisableBlogPosts();
   const hideCommunity = useDisableShowPrompts();
-  const textLinks = hideBlog ? [PRODUCT_LINKS[0]] : [PRODUCT_LINKS[0], BLOG_LINK];
+  const productText = hideBlog ? [PRODUCT_LINKS[0]] : [PRODUCT_LINKS[0], BLOG_LINK];
+  const textLinks = showText ? productText : [];
   return (
     <nav aria-label="Docs and community" className={cn("flex-none items-center gap-0.5", className)}>
-      {textLinks.map(({ href, label }) => (
+      {textLinks.map(({ href, label, short }) => (
         <a
           key={href}
           href={href}
@@ -123,7 +133,7 @@ export function InlineResourceLinks({ className }: { className?: string }) {
           rel="noopener noreferrer"
           className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "px-2 font-medium")}
         >
-          {label === "Documentation" ? "Docs" : label}
+          {short ?? label}
         </a>
       ))}
       {!hideCommunity && (
@@ -149,5 +159,55 @@ export function InlineResourceLinks({ className }: { className?: string }) {
         </TooltipProvider>
       )}
     </nav>
+  );
+}
+
+function formatPostDate(date: string): string {
+  return new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+export function BellResources() {
+  const hideBlog = useDisableBlogPosts();
+  const { data } = useBlogPosts();
+  const groups = useResourceGroups();
+  const posts = hideBlog ? [] : (data?.posts ?? []).slice(0, 3);
+  return (
+    <>
+      {posts.length > 0 && (
+        <>
+          <Separator />
+          <section aria-label="From the blog" className="flex flex-col gap-1">
+            <p className="text-xs font-medium text-muted-foreground">From the blog</p>
+            {posts.map((post) => (
+              <a
+                key={post.url}
+                href={post.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="-mx-2 flex items-baseline justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+              >
+                <span className="line-clamp-1">{post.title}</span>
+                <span className="flex-none text-xs text-muted-foreground">{formatPostDate(post.date)}</span>
+              </a>
+            ))}
+          </section>
+        </>
+      )}
+      <Separator />
+      <nav aria-label="Help and resources" className="-mx-1 flex flex-wrap items-center gap-0.5">
+        {groups.flat().map(({ href, label, short, Icon }) => (
+          <a
+            key={href}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "px-2 text-muted-foreground")}
+          >
+            <Icon />
+            {short ?? label}
+          </a>
+        ))}
+      </nav>
+    </>
   );
 }

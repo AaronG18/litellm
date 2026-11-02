@@ -83,6 +83,7 @@ import {
 import BetaBadge from "./BetaBadge";
 import SidebarAccountMenu from "./SidebarAccountMenu/SidebarAccountMenu";
 import ViewSwitcher from "./Navbar/ViewSwitcher";
+import LiteAdminTrigger from "./liteadmin/LiteAdmin";
 import { useTopBarVariant } from "./TopBar/useTopBarVariant";
 import SidebarUsageCard from "./SidebarUsageCard";
 import { routeSegmentForPathname, uiHref } from "@/utils/uiHref";
@@ -733,6 +734,15 @@ const Sidebar_: React.FC<SidebarProps> = ({
             )}
           </div>
         </SidebarHeader>
+      )}
+      {topBarVariant === "v6" && (
+        <div className="px-3 pt-3 group-data-[collapsed=true]/sidebar:px-2">
+          <LiteAdminTrigger
+            avatarSize={22}
+            className="h-9 w-full justify-start gap-2 rounded-lg border-transparent bg-transparent px-2 font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground aria-expanded:bg-sidebar-accent dark:border-transparent dark:bg-transparent dark:text-sidebar-foreground [&_kbd]:ml-auto group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0"
+            labelClassName="inline group-data-[collapsed=true]/sidebar:hidden"
+          />
+        </div>
       )}
       {topBarVariant === "v5" && (
         <div className="px-3 pt-3 group-data-[collapsed=true]/sidebar:px-2">

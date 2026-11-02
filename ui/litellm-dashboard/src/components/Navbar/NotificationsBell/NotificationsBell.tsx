@@ -91,9 +91,14 @@ const AnnouncementItem: React.FC<{ announcement: Announcement }> = ({ announceme
 interface NotificationsBellViewProps {
   currentVersion: string | null | undefined;
   latestRelease: LatestReleaseInfo | null | undefined;
+  footer?: React.ReactNode;
 }
 
-export const NotificationsBellView: React.FC<NotificationsBellViewProps> = ({ currentVersion, latestRelease }) => {
+export const NotificationsBellView: React.FC<NotificationsBellViewProps> = ({
+  currentVersion,
+  latestRelease,
+  footer,
+}) => {
   const upgrade = upgradeAnnouncement(currentVersion, latestRelease);
   const announcements = upgrade ? [upgrade, AUTO_ROUTER_ANNOUNCEMENT] : [AUTO_ROUTER_ANNOUNCEMENT];
   const unreadCount = useUnreadAnnouncementCount(announcements.map((announcement) => announcement.readKey));
@@ -109,20 +114,26 @@ export const NotificationsBellView: React.FC<NotificationsBellViewProps> = ({ cu
           {unreadCount > 0 ? <Badge className="absolute -top-0.5 -right-1 size-1.5 p-0" aria-hidden /> : null}
         </span>
       </PopoverTrigger>
-      <PopoverContent align="end" aria-label="Notifications">
+      <PopoverContent align="end" aria-label="Notifications" className={footer ? "w-96" : undefined}>
         {announcements.map((announcement, index) => (
           <Fragment key={announcement.readKey}>
             {index > 0 ? <Separator /> : null}
             <AnnouncementItem announcement={announcement} />
           </Fragment>
         ))}
+        {footer}
       </PopoverContent>
     </Popover>
   );
 };
 
-export const NotificationsBell: React.FC<{ accessToken: string | null }> = ({ accessToken }) => {
+export const NotificationsBell: React.FC<{ accessToken: string | null; footer?: React.ReactNode }> = ({
+  accessToken,
+  footer,
+}) => {
   const { data: healthData } = useHealthReadinessDetails(accessToken);
   const { data: latestRelease } = useLatestReleaseInfo(accessToken);
-  return <NotificationsBellView currentVersion={healthData?.litellm_version} latestRelease={latestRelease} />;
+  return (
+    <NotificationsBellView currentVersion={healthData?.litellm_version} latestRelease={latestRelease} footer={footer} />
+  );
 };

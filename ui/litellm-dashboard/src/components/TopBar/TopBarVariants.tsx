@@ -15,7 +15,7 @@ import { ChevronRight, Ellipsis, PanelLeftClose, PanelLeftOpen } from "lucide-re
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { BrandMark } from "./BrandMark";
-import { HelpMenu, InlineResourceLinks, ResourceList } from "./ResourceLinks";
+import { BellResources, HelpMenu, InlineResourceLinks, ResourceList } from "./ResourceLinks";
 import type { TopBarVariant } from "./useTopBarVariant";
 
 export interface VariantHeaderProps {
@@ -102,6 +102,24 @@ function SidebarToggle({ collapsed, onToggle }: { collapsed?: boolean; onToggle?
 export function VariantHeader(props: VariantHeaderProps) {
   const { variant, accessToken, navigationTrigger, deploymentHealth, workerSwitch } = props;
   const bell = <NotificationsBell accessToken={accessToken} />;
+
+  if (variant === "v6") {
+    return (
+      <header className={HEADER} data-topbar-variant={variant}>
+        {navigationTrigger}
+        <Context />
+        <CommandPaletteTrigger className="hidden w-56 @min-[560px]:flex @min-[900px]:w-72 @min-[1200px]:w-96" />
+        <div className={TOOLS}>
+          <CommandPaletteTrigger mobile className={cn(SEARCH_ICON, "@min-[560px]:hidden")} />
+          {workerSwitch}
+          <InlineResourceLinks textLinks={false} className="hidden @min-[760px]:flex" />
+          <ToolbarSeparator className="hidden @min-[760px]:block" />
+          {deploymentHealth}
+          <NotificationsBell accessToken={accessToken} footer={<BellResources />} />
+        </div>
+      </header>
+    );
+  }
 
   if (variant === "v1") {
     return (
