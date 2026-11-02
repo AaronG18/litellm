@@ -52,6 +52,8 @@ type LiteAdminState = {
   setHomeContainer: (container: HTMLDivElement | null) => void;
   usageContainer: HTMLDivElement | null;
   setUsageContainer: (container: HTMLDivElement | null) => void;
+  pageContainer: HTMLDivElement | null;
+  setPageContainer: (container: HTMLDivElement | null) => void;
 };
 
 function getComposerContainer(state: LiteAdminState | null, open: boolean): HTMLDivElement | null {
@@ -88,6 +90,7 @@ export function LiteAdminFrame({ children }: { children: ReactNode }) {
   const [started, setStarted] = useState(false);
   const [homeContainer, setHomeContainer] = useState<HTMLDivElement | null>(null);
   const [usageContainer, updateUsageContainer] = useState<HTMLDivElement | null>(null);
+  const [pageContainer, setPageContainer] = useState<HTMLDivElement | null>(null);
   const setUsageContainer = useCallback((container: HTMLDivElement | null) => {
     updateUsageContainer(container);
     if (container) setStarted(true);
@@ -107,7 +110,8 @@ export function LiteAdminFrame({ children }: { children: ReactNode }) {
     setStarted(true);
     setOpen(true);
   };
-  const showPanel = configured?.session.access.mode === "admin" || started;
+  const showPanel = configured?.session.access.mode === "admin" || started || pageContainer !== null;
+  const panelOpen = open || pageContainer !== null;
   useEffect(() => {
     if (sessionKey === null) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -134,13 +138,15 @@ export function LiteAdminFrame({ children }: { children: ReactNode }) {
               setHomeContainer,
               usageContainer,
               setUsageContainer,
+              pageContainer,
+              setPageContainer,
             }
           : null
       }
     >
       {children}
       {configured && showPanel && (
-        <AriaPopup key={configured.key} session={configured.session} open={open} close={() => setOpen(false)} />
+        <AriaPopup key={configured.key} session={configured.session} open={panelOpen} close={() => setOpen(false)} />
       )}
     </LiteAdminContext.Provider>
   );
@@ -332,8 +338,9 @@ function Panel({
   children: ReactNode;
 }) {
   const state = useContext(LiteAdminContext);
-  const homeContainer = getComposerContainer(state, open);
+  const homeContainer = state?.pageContainer ? null : getComposerContainer(state, open);
   const ref = useRef<HTMLDivElement>(null);
+  const pageContainer = state?.pageContainer ?? null;
   return (
     <Dialog
       open={open}
@@ -354,7 +361,12 @@ function Panel({
           initialFocus?.current ?? ref.current?.querySelector<HTMLElement>("textarea:enabled") ?? ref.current
         }
         finalFocus={state?.triggerRef}
-        className="flex h-[min(48rem,calc(100dvh-2rem))] flex-col gap-0 overflow-hidden p-0 shadow-xl sm:max-w-4xl"
+        container={pageContainer ?? undefined}
+        className={cn(
+          "flex h-[min(48rem,calc(100dvh-2rem))] flex-col gap-0 overflow-hidden p-0 shadow-xl sm:max-w-4xl",
+          pageContainer &&
+            "relative top-auto left-auto z-auto h-full max-w-none translate-x-0 translate-y-0 rounded-none shadow-none ring-0 data-open:animate-none sm:max-w-none",
+        )}
       >
         {children}
         {homeContainer ? createPortal(composer, homeContainer) : composer}
@@ -584,10 +596,21 @@ function PanelHeader({ children }: { children?: ReactNode }) {
       </div>
       <div className="flex shrink-0">
         {children}
-        <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label={`Close ${ARIA_AGENT_LABEL}`} />}>
-          <X className="size-4" />
-        </DialogClose>
+        {!state?.pageContainer && (
+          <DialogClose render={<Button variant="ghost" size="icon-sm" aria-label={`Close ${ARIA_AGENT_LABEL}`} />}>
+            <X className="size-4" />
+          </DialogClose>
+        )}
       </div>
     </div>
   );
+}
+
+export function LiteAdminPage() {
+  const state = useContext(LiteAdminContext);
+  if (!state) {
+    return <p className="p-6 text-sm text-muted-foreground">{ARIA_AGENT_LABEL} is not available for this account.</p>;
+  }
+  const { setPageContainer } = state;
+  return <div ref={setPageContainer} className="h-full min-h-0 *:h-full" />;
 }

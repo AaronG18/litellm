@@ -103,7 +103,7 @@ export function VariantHeader(props: VariantHeaderProps) {
   const { variant, accessToken, navigationTrigger, deploymentHealth, workerSwitch } = props;
   const bell = <NotificationsBell accessToken={accessToken} />;
 
-  if (variant === "v7") {
+  if (variant === "v7" || variant === "v8") {
     return (
       <header className={HEADER} data-topbar-variant={variant}>
         {navigationTrigger}

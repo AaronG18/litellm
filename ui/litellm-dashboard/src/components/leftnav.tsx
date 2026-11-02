@@ -84,6 +84,9 @@ import BetaBadge from "./BetaBadge";
 import SidebarAccountMenu from "./SidebarAccountMenu/SidebarAccountMenu";
 import ViewSwitcher from "./Navbar/ViewSwitcher";
 import LiteAdminTrigger from "./liteadmin/LiteAdmin";
+import { AriaAvatar } from "./liteadmin/AriaAvatar";
+import { ARIA_AGENT_LABEL } from "./liteadmin/aria-brand";
+import { Kbd } from "./ui/kbd";
 import { useTopBarVariant } from "./TopBar/useTopBarVariant";
 import SidebarUsageCard from "./SidebarUsageCard";
 import { routeSegmentForPathname, uiHref } from "@/utils/uiHref";
@@ -549,6 +552,7 @@ const Sidebar_: React.FC<SidebarProps> = ({
   const { data: teams } = useTeams();
   const { logoUrl, logoUrlDark } = useTheme();
   const topBarVariant = useTopBarVariant();
+  const onAriaPage = (usePathname() ?? "").replace(/\/+$/, "").endsWith("/aria");
   const [erroredDarkLogo, setErroredDarkLogo] = useState<string | null>(null);
   const { data: healthData } = useHealthReadinessDetails(accessToken);
   const logout = useLogout(accessToken);
@@ -735,9 +739,25 @@ const Sidebar_: React.FC<SidebarProps> = ({
           </div>
         </SidebarHeader>
       )}
-      {(topBarVariant === "v5" || topBarVariant === "v7") && (
+      {(topBarVariant === "v5" || topBarVariant === "v7" || topBarVariant === "v8") && (
         <div className="px-3 pt-3 group-data-[collapsed=true]/sidebar:px-2">
           <ViewSwitcher className="w-full max-w-none justify-start [&_[data-slot=workspace-chevron]]:ml-auto group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0 group-data-[collapsed=true]/sidebar:[&_[data-slot=workspace-chevron]]:hidden group-data-[collapsed=true]/sidebar:[&_[data-slot=workspace-label]]:hidden" />
+        </div>
+      )}
+      {topBarVariant === "v8" && (
+        <div className="px-3 pt-3 group-data-[collapsed=true]/sidebar:px-2">
+          <Link
+            href={uiHref("aria")}
+            aria-label={ARIA_AGENT_LABEL}
+            className={cn(
+              "flex h-9 items-center gap-2 rounded-lg px-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0",
+              onAriaPage && "bg-sidebar-accent",
+            )}
+          >
+            <AriaAvatar size={22} />
+            <span className="group-data-[collapsed=true]/sidebar:hidden">{ARIA_AGENT_LABEL}</span>
+            <Kbd className="ml-auto group-data-[collapsed=true]/sidebar:hidden">⌘J</Kbd>
+          </Link>
         </div>
       )}
       {(topBarVariant === "v6" || topBarVariant === "v7") && (
