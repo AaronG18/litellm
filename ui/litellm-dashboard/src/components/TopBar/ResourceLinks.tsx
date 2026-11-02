@@ -3,7 +3,8 @@
 import { useDisableBlogPosts } from "@/app/(dashboard)/hooks/useDisableBlogPosts";
 import { useDisableShowPrompts } from "@/app/(dashboard)/hooks/useDisableShowPrompts";
 import { DOCS_URL } from "@/components/Navbar/DocsLink/DocsLink";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +20,15 @@ import { BookOpen, CircleHelp, Github, Newspaper, ScrollText, Slack, type Lucide
 interface ResourceLink {
   href: string;
   label: string;
-  Icon: LucideIcon;
+  Icon: LucideIcon | typeof DiscordIcon;
+}
+
+function DiscordIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className={cn("size-4", className)}>
+      <path d="M20.32 4.37a19.8 19.8 0 0 0-4.89-1.52.07.07 0 0 0-.08.04c-.21.38-.44.87-.61 1.25a18.27 18.27 0 0 0-5.49 0 12.6 12.6 0 0 0-.62-1.25.08.08 0 0 0-.08-.04 19.74 19.74 0 0 0-4.89 1.52.07.07 0 0 0-.03.03C.53 9.05-.32 13.58.1 18.06a.08.08 0 0 0 .03.06 19.9 19.9 0 0 0 5.99 3.03.08.08 0 0 0 .08-.03c.46-.63.87-1.3 1.23-1.99a.08.08 0 0 0-.04-.11 13.1 13.1 0 0 1-1.87-.89.08.08 0 0 1-.01-.13l.37-.29a.07.07 0 0 1 .08-.01c3.93 1.79 8.18 1.79 12.06 0a.07.07 0 0 1 .08.01l.37.29a.08.08 0 0 1-.01.13c-.6.35-1.22.65-1.87.89a.08.08 0 0 0-.04.11c.36.7.78 1.36 1.23 1.99a.08.08 0 0 0 .08.03 19.84 19.84 0 0 0 6-3.03.08.08 0 0 0 .03-.05c.5-5.18-.84-9.67-3.55-13.66a.06.06 0 0 0-.03-.03ZM8.02 15.33c-1.18 0-2.16-1.08-2.16-2.42 0-1.33.96-2.42 2.16-2.42 1.21 0 2.18 1.1 2.16 2.42 0 1.34-.96 2.42-2.16 2.42Zm7.97 0c-1.18 0-2.15-1.08-2.15-2.42 0-1.33.95-2.42 2.15-2.42 1.21 0 2.18 1.1 2.16 2.42 0 1.34-.95 2.42-2.16 2.42Z" />
+    </svg>
+  );
 }
 
 const PRODUCT_LINKS: readonly ResourceLink[] = [
@@ -29,6 +38,7 @@ const PRODUCT_LINKS: readonly ResourceLink[] = [
 const BLOG_LINK: ResourceLink = { href: "https://docs.litellm.ai/blog", label: "Blog", Icon: Newspaper };
 const COMMUNITY_LINKS: readonly ResourceLink[] = [
   { href: "https://www.litellm.ai/support", label: "Slack community", Icon: Slack },
+  { href: "https://discord.gg/wuPM9dRgDw", label: "Discord", Icon: DiscordIcon },
   { href: "https://github.com/BerriAI/litellm", label: "GitHub", Icon: Github },
 ];
 
@@ -95,6 +105,49 @@ export function ResourceList() {
           {label}
         </a>
       ))}
+    </nav>
+  );
+}
+
+export function InlineResourceLinks({ className }: { className?: string }) {
+  const hideBlog = useDisableBlogPosts();
+  const hideCommunity = useDisableShowPrompts();
+  const textLinks = hideBlog ? [PRODUCT_LINKS[0]] : [PRODUCT_LINKS[0], BLOG_LINK];
+  return (
+    <nav aria-label="Docs and community" className={cn("flex-none items-center gap-0.5", className)}>
+      {textLinks.map(({ href, label }) => (
+        <a
+          key={href}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "px-2 font-medium")}
+        >
+          {label === "Documentation" ? "Docs" : label}
+        </a>
+      ))}
+      {!hideCommunity && (
+        <TooltipProvider>
+          {COMMUNITY_LINKS.map(({ href, label, Icon }) => (
+            <Tooltip key={href}>
+              <TooltipTrigger
+                render={
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={label}
+                    className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "text-muted-foreground")}
+                  />
+                }
+              >
+                <Icon />
+              </TooltipTrigger>
+              <TooltipContent>{label}</TooltipContent>
+            </Tooltip>
+          ))}
+        </TooltipProvider>
+      )}
     </nav>
   );
 }

@@ -8,13 +8,14 @@ import ViewSwitcher from "@/components/Navbar/ViewSwitcher";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
+import { ToolbarSeparator } from "@/components/shared/ToolbarSeparator";
 import { useTerminology } from "@/contexts/TerminologyContext";
 import { cn } from "@/lib/cva.config";
 import { ChevronRight, Ellipsis, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { BrandMark } from "./BrandMark";
-import { HelpMenu, ResourceList } from "./ResourceLinks";
+import { HelpMenu, InlineResourceLinks, ResourceList } from "./ResourceLinks";
 import type { TopBarVariant } from "./useTopBarVariant";
 
 export interface VariantHeaderProps {
@@ -112,7 +113,9 @@ export function VariantHeader(props: VariantHeaderProps) {
           <CommandPaletteTrigger mobile className={cn(SEARCH_ICON, "@min-[600px]:hidden")} />
           {workerSwitch}
           <Aria size="from1100" />
-          <HelpMenu />
+          <InlineResourceLinks className="hidden @min-[960px]:flex" />
+          <ToolbarSeparator className="hidden @min-[960px]:block" />
+          <HelpMenu className="@min-[960px]:hidden" />
           {deploymentHealth}
           {bell}
         </div>
@@ -133,7 +136,9 @@ export function VariantHeader(props: VariantHeaderProps) {
           <CommandPaletteTrigger mobile className={cn(SEARCH_ICON, "@min-[760px]:hidden")} />
           {workerSwitch}
           <Aria size="from1300" />
-          <HelpMenu />
+          <InlineResourceLinks className="hidden @min-[960px]:flex" />
+          <ToolbarSeparator className="hidden @min-[960px]:block" />
+          <HelpMenu className="@min-[960px]:hidden" />
           {deploymentHealth}
           {bell}
         </div>
@@ -150,6 +155,8 @@ export function VariantHeader(props: VariantHeaderProps) {
         <div className={TOOLS}>
           <CommandPaletteTrigger mobile className={cn(SEARCH_ICON, "@min-[560px]:hidden")} />
           <Aria size="from700" />
+          <InlineResourceLinks className="hidden @min-[960px]:flex" />
+          <ToolbarSeparator className="hidden @min-[960px]:block" />
           {deploymentHealth}
           {bell}
           <MoreMenu workerSwitch={workerSwitch} />
@@ -176,7 +183,9 @@ export function VariantHeader(props: VariantHeaderProps) {
           <CommandPaletteTrigger mobile className={cn(SEARCH_ICON, "@min-[1000px]:hidden")} />
           {workerSwitch}
           <Aria size="from1300" />
-          <HelpMenu className="max-md:hidden" />
+          <InlineResourceLinks className="hidden @min-[1240px]:flex" />
+          <ToolbarSeparator className="hidden @min-[1240px]:block" />
+          <HelpMenu className="max-md:hidden @min-[1240px]:hidden" />
           {deploymentHealth}
           {bell}
           <MoreMenu className="md:hidden" />
@@ -194,7 +203,9 @@ export function VariantHeader(props: VariantHeaderProps) {
         <CommandPaletteTrigger mobile className={cn(SEARCH_ICON, "@min-[560px]:hidden")} />
         {workerSwitch}
         <Aria size="from900" />
-        <HelpMenu />
+        <InlineResourceLinks className="hidden @min-[700px]:flex" />
+        <ToolbarSeparator className="hidden @min-[700px]:block" />
+        <HelpMenu className="@min-[700px]:hidden" />
         {deploymentHealth}
         {bell}
       </div>
