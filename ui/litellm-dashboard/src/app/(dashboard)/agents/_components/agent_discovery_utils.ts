@@ -1,6 +1,7 @@
 import { AgentCreateInfo, DiscoveredAgentCard, DiscoveryMode } from "@/components/networking";
+import { DiscoveryAuth, agentAuthSupport, discoveryAuth } from "./agent_auth";
 
-export interface DiscoveryRequestPlan {
+export interface DiscoveryRequestPlan extends DiscoveryAuth {
   url: string;
   discovery_mode: DiscoveryMode;
   params?: Record<string, any>;
@@ -128,9 +129,15 @@ export const buildDiscoveryRequest = (
   agentType: string,
   values: Record<string, any>,
   selectedAgentTypeInfo?: AgentCreateInfo,
+  savedAgentId?: string,
 ): DiscoveryRequestPlan | undefined => {
   const trim = (v: unknown) => (v ?? "").toString().trim();
   const stripTrailingSlash = (s: string) => s.replace(/\/+$/, "");
+  const auth = discoveryAuth(
+    values,
+    agentAuthSupport(agentType, selectedAgentTypeInfo?.use_a2a_form_fields),
+    savedAgentId,
+  );
 
   if (agentType === "langgraph") {
     const base = stripTrailingSlash(trim(values.api_base));
@@ -142,6 +149,7 @@ export const buildDiscoveryRequest = (
       discovery_mode: "langgraph_platform",
       params: { assistant_id: assistantId },
       display_url: `${base}/.well-known/agent-card.json${query}`,
+      ...auth,
     };
   }
 
@@ -152,6 +160,7 @@ export const buildDiscoveryRequest = (
       url: base,
       discovery_mode: "well_known_fallback",
       display_url: `${base}/.well-known/agent-card.json`,
+      ...auth,
     };
   }
 

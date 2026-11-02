@@ -189,6 +189,60 @@ describe("AgentCardDiscovery", () => {
     });
   });
 
+  const credentialedPlan = (apiKey: string) => ({
+    url: "https://lg.example.com",
+    discovery_mode: "langgraph_platform" as const,
+    params: { assistant_id: "asst_1" },
+    api_key: apiKey,
+    static_headers: { "x-tenant": "t1" },
+  });
+
+  it("retries with a new token after discovery failed", async () => {
+    mockDiscover
+      .mockRejectedValueOnce(new Error("HTTP 401"))
+      .mockResolvedValue({ url: "https://lg.example.com", agent_card: sampleCard });
+    const { rerender } = renderWithProviders(
+      <AgentCardDiscovery accessToken="tok" onApply={vi.fn()} discoveryRequest={credentialedPlan("sk-wrong")} />,
+    );
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await screen.findByText(/HTTP 401/)).toBeInTheDocument();
+
+    rerender(
+      <AgentCardDiscovery accessToken="tok" onApply={vi.fn()} discoveryRequest={credentialedPlan("sk-right")} />,
+    );
+    await vi.advanceTimersByTimeAsync(500);
+
+    await waitFor(() => expect(mockDiscover).toHaveBeenCalledTimes(2));
+    const retried = {
+      discovery_mode: "langgraph_platform",
+      params: { assistant_id: "asst_1" },
+      api_key: "sk-right",
+      static_headers: { "x-tenant": "t1" },
+      agent_id: undefined,
+    };
+    expect(mockDiscover).toHaveBeenLastCalledWith("tok", "https://lg.example.com", retried);
+  });
+
+  it("keeps a loaded card and asks for a re-discover when the token changes", async () => {
+    mockDiscover.mockResolvedValue({ url: "https://lg.example.com", agent_card: sampleCard });
+    const { rerender } = renderWithProviders(
+      <AgentCardDiscovery accessToken="tok" onApply={vi.fn()} discoveryRequest={credentialedPlan("sk-first")} />,
+    );
+    await vi.advanceTimersByTimeAsync(500);
+    expect(await screen.findByText("Upstream card loaded")).toBeInTheDocument();
+    expect(screen.queryByText(/The credentials changed since this card loaded/)).not.toBeInTheDocument();
+
+    rerender(
+      <AgentCardDiscovery accessToken="tok" onApply={vi.fn()} discoveryRequest={credentialedPlan("sk-second")} />,
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(mockDiscover).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByText("The credentials changed since this card loaded. Click Re-discover to test them."),
+    ).toBeInTheDocument();
+  });
+
   it("disables Re-discover until the parent provides a usable URL", async () => {
     renderWithProviders(
       <AgentCardDiscovery

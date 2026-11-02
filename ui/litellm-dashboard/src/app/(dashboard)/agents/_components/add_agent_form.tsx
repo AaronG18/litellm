@@ -36,6 +36,8 @@ import TeamDropdown from "@/components/common_components/team_dropdown";
 import AgentFormFields from "./agent_form_fields";
 import AgentCardDiscovery, { DiscoveredAgentCardSelection } from "./agent_card_discovery";
 import { buildDiscoveryRequest, overlayDiscoveredCardParams } from "./agent_discovery_utils";
+import AgentAuthSettings from "./AgentAuthSettings";
+import { agentAuthSupport, withAgentAuth } from "./agent_auth";
 import DynamicAgentFormFields, { buildDynamicAgentData } from "./dynamic_agent_form_fields";
 import { PasswordInput } from "@/components/shared/PasswordInput";
 import { AGENT_FORM_CONFIG, getDefaultFormValues, buildAgentDataFromForm } from "./agent_config";
@@ -249,6 +251,7 @@ const AddAgentForm: React.FC<AddAgentFormProps> = ({ visible, onClose, accessTok
   }, [currentStep, accessToken]);
 
   const selectedAgentTypeInfo = agentTypeMetadata.find((info) => info.agent_type === agentType);
+  const authSupport = agentAuthSupport(agentType, selectedAgentTypeInfo?.use_a2a_form_fields);
 
   // Watch every form field so we can recompute the discovery plan whenever
   // the user types into a relevant credential field below.
@@ -362,7 +365,7 @@ const AddAgentForm: React.FC<AddAgentFormProps> = ({ visible, onClose, accessTok
         setIsSubmitting(false);
         return;
       }
-      const agentData = withAgentIdentity(built, values);
+      const agentData = withAgentIdentity(withAgentAuth(built, values, authSupport), values);
 
       // Build object_permission from MCP Tools step (allowed_mcp_servers_and_groups, mcp_tool_permissions)
       const mcpServersAndGroups = values.allowed_mcp_servers_and_groups ?? {};
@@ -889,6 +892,7 @@ const AddAgentForm: React.FC<AddAgentFormProps> = ({ visible, onClose, accessTok
             discover, so we skip them. */}
         {agentType !== CUSTOM_AGENT_TYPE && (
           <div className="mt-4">
+            <AgentAuthSettings support={authSupport} />
             <AgentCardDiscovery
               accessToken={accessToken}
               onApply={handleApplyDiscoveredCard}

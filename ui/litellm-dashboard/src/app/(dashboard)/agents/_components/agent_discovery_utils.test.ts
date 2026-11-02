@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { selectionsFromSavedAgentCard, selectionsFromUpstreamCard, skillId } from "./agent_discovery_utils";
+import {
+  buildDiscoveryRequest,
+  selectionsFromSavedAgentCard,
+  selectionsFromUpstreamCard,
+  skillId,
+} from "./agent_discovery_utils";
 
 const upstreamCard = {
   name: "Upstream Agent",
@@ -48,5 +53,42 @@ describe("selectionsFromUpstreamCard", () => {
     const result = selectionsFromUpstreamCard(upstreamCard);
     expect(result.selectedSkillIds.size).toBe(3);
     expect(result.editedName).toBe("Upstream Agent");
+  });
+});
+
+describe("buildDiscoveryRequest", () => {
+  it("sends a LangGraph agent's bearer token and static headers with the card request", () => {
+    const values = {
+      api_base: "https://lg.example.com/",
+      assistant_id: "asst_1",
+      auth_type: "bearer_token",
+      api_key: "sk-1",
+      static_headers: [{ header: "x-tenant", value: "t1" }],
+    };
+
+    const plan = {
+      url: "https://lg.example.com",
+      discovery_mode: "langgraph_platform",
+      params: { assistant_id: "asst_1" },
+      display_url: "https://lg.example.com/.well-known/agent-card.json?assistant_id=asst_1",
+      api_key: "sk-1",
+      static_headers: { "x-tenant": "t1" },
+    };
+
+    expect(buildDiscoveryRequest("langgraph", values)).toEqual(plan);
+  });
+
+  it("asks an edited A2A agent's card request to reuse its saved key", () => {
+    const values = { url: "https://agent.example.com", auth_type: "bearer_token", api_key: "REDACTED_BY_LITELM" };
+
+    const plan = {
+      url: "https://agent.example.com",
+      discovery_mode: "well_known_fallback",
+      display_url: "https://agent.example.com/.well-known/agent-card.json",
+      api_key: "REDACTED_BY_LITELM",
+      agent_id: "agent-1",
+    };
+
+    expect(buildDiscoveryRequest("a2a", values, undefined, "agent-1")).toEqual(plan);
   });
 });

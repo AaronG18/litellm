@@ -48,7 +48,6 @@ const langgraphInfo: AgentCreateInfo = {
   credential_fields: [
     { key: "api_base", label: "API Base", field_type: "text", required: true, placeholder: "https://host" },
     { key: "assistant_id", label: "Assistant ID", field_type: "text", required: true, default_value: "" },
-    { key: "api_key", label: "API Key", field_type: "password", required: false },
   ],
 };
 
@@ -199,10 +198,9 @@ describe("AddAgentForm submit payload", () => {
     await user.type(await screen.findByLabelText("Model (Optional)"), "gpt-4o");
     await user.click(screen.getByRole("switch", { name: "Make Public" }));
 
-    await user.click(await panel(/Authentication Headers/));
     await user.click(await screen.findByRole("button", { name: /Add Static Header/ }));
-    await user.type(await screen.findByPlaceholderText("Header name (e.g. Authorization)"), "X-Tenant");
-    await user.type(screen.getByPlaceholderText("Value (e.g. Bearer token123)"), "acme");
+    await user.type(await screen.findByPlaceholderText("Header name (e.g. x-api-key)"), "X-Tenant");
+    await user.type(screen.getByPlaceholderText("Value"), "acme");
     await user.type(screen.getByLabelText("Forward Client Headers"), "x-api-key,");
     await user.click(screen.getByLabelText("Agent Name"));
 
@@ -321,7 +319,9 @@ describe("AddAgentForm submit payload", () => {
     await user.type(screen.getByPlaceholderText("Describe what this agent does..."), "graph agent");
     await user.type(screen.getByLabelText("API Base"), "https://lg.example.com");
     await user.type(screen.getByLabelText("Assistant ID"), "asst_1");
-    await user.type(screen.getByLabelText("API Key"), "secret-value");
+    await user.click(screen.getByRole("combobox", { name: "Authentication" }));
+    await user.click(await screen.findByRole("option", { name: "Bearer Token" }));
+    await user.type(await screen.findByLabelText("Authentication Value"), "secret-value");
 
     await goToLastStepAndCreate(user);
 

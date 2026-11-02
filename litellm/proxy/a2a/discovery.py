@@ -16,6 +16,9 @@ fetcher dispatches by ``discovery_mode``:
 
 from collections.abc import Mapping
 from enum import Enum
+from functools import reduce
+from itertools import chain
+from types import MappingProxyType
 from typing import Final
 from urllib.parse import urlencode
 
@@ -54,6 +57,30 @@ _DECODED_JSON: Final = TypeAdapter(object)
 
 class AgentCardDiscoveryError(Exception):
     """Raised when none of the well-known paths returned a usable agent card."""
+
+
+def card_request_headers(
+    api_key: str | None, static_headers: Mapping[str, str], discovery_mode: DiscoveryMode
+) -> Mapping[str, str]:
+    """Authenticate like the agent's runtime: a LangGraph key overrides a static Authorization header,
+    while an A2A agent's static Authorization header overrides the key."""
+    bearer: Final = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    if bearer and discovery_mode is DiscoveryMode.LANGGRAPH_PLATFORM:
+        unauthorized: Final = {name: value for name, value in static_headers.items() if name.lower() != "authorization"}
+        return MappingProxyType({**unauthorized, **bearer})
+    sets_authorization: Final = any(name.lower() == "authorization" for name in static_headers)
+    return MappingProxyType({**({} if sets_authorization else bearer), **static_headers})
+
+
+def _secret_parts(header_value: str) -> tuple[str, ...]:
+    value: Final = header_value.strip()
+    return (value, value.split()[-1]) if value else ()
+
+
+def _without_secrets(text: str, headers: Mapping[str, str]) -> str:
+    secrets: Final = frozenset(chain.from_iterable(_secret_parts(value) for value in headers.values()))
+    longest_first: Final = sorted(secrets, key=len, reverse=True)
+    return reduce(lambda redacted, secret: redacted.replace(secret, "<redacted>"), longest_first, text)
 
 
 def _normalize_base_url(base_url: str) -> str:
@@ -126,15 +153,21 @@ async def fetch_well_known_card(
             # returns ``None`` when the key is present-but-None, then crashes
             # on ``{**None, "Host": ...}``. Default the kwarg to an empty
             # dict so production (``user_url_validation=True``) doesn't 500.
-            response = await async_safe_get(client, url, headers=headers or {})
+            response = await async_safe_get(client, url, headers=headers or {}, follow_redirects=not headers)
         except SSRFError as exc:
-            last_error = f"{url}: {exc}"
-            verbose_proxy_logger.debug("A2A discovery blocked by SSRF guard for %s: %s", url, exc)
+            last_error = f"{url}: {_without_secrets(str(exc), headers or {})}"
+            verbose_proxy_logger.debug("A2A discovery blocked by SSRF guard for %s", last_error)
             continue
         except Exception as exc:
-            last_error = f"{url}: {exc}"
-            verbose_proxy_logger.debug("A2A discovery failed for %s: %s", url, exc)
+            last_error = f"{url}: {_without_secrets(str(exc), headers or {})}"
+            verbose_proxy_logger.debug("A2A discovery failed for %s", last_error)
             continue
+
+        if headers and 300 <= response.status_code < 400:
+            raise AgentCardDiscoveryError(
+                f"{url} answered HTTP {response.status_code} with a redirect, "
+                "and discovery does not follow redirects while sending the agent's credentials"
+            )
 
         if response.status_code >= 400:
             last_error = f"{url}: HTTP {response.status_code}"

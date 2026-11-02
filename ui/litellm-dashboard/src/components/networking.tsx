@@ -4353,7 +4353,10 @@ type DiscoverAgentCardResponse = Omit<components["schemas"]["DiscoverAgentRespon
 
 export type DiscoveryMode = components["schemas"]["DiscoveryMode"];
 type DiscoverAgentCardOptions = Partial<
-  Pick<components["schemas"]["DiscoverAgentRequest"], "discovery_mode" | "params">
+  Pick<
+    components["schemas"]["DiscoverAgentRequest"],
+    "discovery_mode" | "params" | "api_key" | "static_headers" | "agent_id"
+  >
 >;
 
 export const discoverAgentCardCall = async (

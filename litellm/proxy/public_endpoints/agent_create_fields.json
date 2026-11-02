@@ -75,16 +75,6 @@
         "field_type": "text",
         "default_value": "http://localhost:2024",
         "include_in_litellm_params": true
-      },
-      {
-        "key": "api_key",
-        "label": "LangGraph API Key",
-        "placeholder": null,
-        "tooltip": "API key for authenticating with your LangGraph server (optional for local development)",
-        "required": false,
-        "field_type": "password",
-        "default_value": null,
-        "include_in_litellm_params": true
       }
     ],
     "litellm_params_template": {

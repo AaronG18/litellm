@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { ChevronDown, CircleAlert, CircleCheck, Info, Link as LinkIcon, RotateCw, Search, X } from "lucide-react";
 
 import { useDebouncedCallback } from "@tanstack/react-pacer/debouncer";
@@ -37,6 +37,9 @@ export interface DiscoveredAgentCardSelection {
 
 export type { DiscoveryRequestPlan } from "./agent_discovery_utils";
 import type { DiscoveryRequestPlan } from "./agent_discovery_utils";
+
+const credentialsKey = (plan?: DiscoveryRequestPlan): string =>
+  JSON.stringify([plan?.api_key, plan?.static_headers, plan?.agent_id]);
 
 interface AgentCardDiscoveryProps {
   accessToken: string | null;
@@ -114,6 +117,8 @@ const AgentCardDiscovery: React.FC<AgentCardDiscoveryProps> = ({
     () => JSON.stringify(discoveryRequest?.params ?? null),
     [discoveryRequest?.params],
   );
+  const discoveryAuthKey = credentialsKey(discoveryRequest);
+  const [loadedCredentialsKey, setLoadedCredentialsKey] = useState<string | null>(null);
 
   const handleDiscover = useCallback(async () => {
     if (!accessToken) {
@@ -143,12 +148,16 @@ const AgentCardDiscovery: React.FC<AgentCardDiscoveryProps> = ({
           ? {
               discovery_mode: currentDiscoveryRequest.discovery_mode,
               params: currentDiscoveryRequest.params,
+              api_key: currentDiscoveryRequest.api_key,
+              static_headers: currentDiscoveryRequest.static_headers,
+              agent_id: currentDiscoveryRequest.agent_id,
             }
           : undefined,
       );
       if (requestId !== discoverRequestIdRef.current) return;
       lastSyncedSelectionRef.current = null;
       setCard(response.agent_card);
+      setLoadedCredentialsKey(credentialsKey(currentDiscoveryRequest));
       resetSelections(response.agent_card);
     } catch (e: any) {
       if (requestId !== discoverRequestIdRef.current) return;
@@ -198,6 +207,14 @@ const AgentCardDiscovery: React.FC<AgentCardDiscoveryProps> = ({
 
     debouncedDiscover();
   }, [accessToken, effectiveUrl, handleDiscover, debouncedDiscover]);
+
+  // Retry on new credentials only until a card loads, so editing a token never resets the admin's selections.
+  const retryWithNewCredentials = useEffectEvent(() => {
+    if (!card) debouncedDiscover();
+  });
+  useEffect(() => {
+    retryWithNewCredentials();
+  }, [discoveryAuthKey]);
 
   const toggleSkill = (id: string, checked: boolean) => {
     setSelectedSkillIds((prev) => {
@@ -339,6 +356,11 @@ const AgentCardDiscovery: React.FC<AgentCardDiscoveryProps> = ({
             {card.version && <Badge variant="secondary">v{card.version}</Badge>}
             {card.provider?.organization && <Badge variant="secondary">{card.provider.organization}</Badge>}
           </div>
+          {loadedCredentialsKey !== discoveryAuthKey && (
+            <p className="mb-3 text-sm text-warning">
+              The credentials changed since this card loaded. Click Re-discover to test them.
+            </p>
+          )}
 
           <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
             <div>

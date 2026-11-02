@@ -50,6 +50,8 @@ import AgentCostView from "./agent_cost_view";
 import { detectAgentType, parseDynamicAgentForForm } from "./agent_type_utils";
 import AgentCardDiscovery, { DiscoveredAgentCardSelection } from "./agent_card_discovery";
 import { buildDiscoveryRequest, overlayDiscoveredCardParams } from "./agent_discovery_utils";
+import AgentAuthSettings from "./AgentAuthSettings";
+import { agentAuthFormValues, agentAuthSupport, withAgentAuth } from "./agent_auth";
 
 interface AgentInfoViewProps {
   agentId: string;
@@ -131,6 +133,7 @@ const AgentInfoView: React.FC<AgentInfoViewProps> = ({ agentId, onClose, accessT
         if (typeInfo) {
           form.reset({
             ...parseDynamicAgentForForm(data, typeInfo),
+            ...agentAuthFormValues(data),
             ...parseMcpPermissionsForForm(data),
             ...parseAccessGroupIdsForForm(data),
           });
@@ -155,6 +158,7 @@ const AgentInfoView: React.FC<AgentInfoViewProps> = ({ agentId, onClose, accessT
         if (typeInfo) {
           form.reset({
             ...parseDynamicAgentForForm(agent, typeInfo),
+            ...agentAuthFormValues(agent),
             ...parseMcpPermissionsForForm(agent),
             ...parseAccessGroupIdsForForm(agent),
           });
@@ -164,6 +168,11 @@ const AgentInfoView: React.FC<AgentInfoViewProps> = ({ agentId, onClose, accessT
   }, [agentTypeMetadata, agent]);
 
   const selectedAgentTypeInfo = agentTypeMetadata.find((t) => t.agent_type === detectedAgentType);
+  const usesA2AFormFields = selectedAgentTypeInfo?.use_a2a_form_fields;
+  const authSupport = useMemo(
+    () => agentAuthSupport(detectedAgentType, usesA2AFormFields),
+    [detectedAgentType, usesA2AFormFields],
+  );
   const watchedFormValues = useWatch({ control: form.control });
   const mcpSelection = useWatch({ control: form.control, name: "allowed_mcp_servers_and_groups" });
   const mcpToolPermissions = useWatch({ control: form.control, name: "mcp_tool_permissions" });
@@ -181,8 +190,8 @@ const AgentInfoView: React.FC<AgentInfoViewProps> = ({ agentId, onClose, accessT
   };
 
   const discoveryRequest = useMemo(
-    () => buildDiscoveryRequest(detectedAgentType, watchedFormValues || {}, selectedAgentTypeInfo),
-    [watchedFormValues, selectedAgentTypeInfo, detectedAgentType],
+    () => buildDiscoveryRequest(detectedAgentType, watchedFormValues || {}, selectedAgentTypeInfo, agentId),
+    [watchedFormValues, selectedAgentTypeInfo, detectedAgentType, agentId],
   );
 
   const handleApplyDiscoveredCard = (selection: DiscoveredAgentCardSelection | null) => {
@@ -231,9 +240,14 @@ const AgentInfoView: React.FC<AgentInfoViewProps> = ({ agentId, onClose, accessT
           : unmountedA2AFieldNames(panels.mountedPanels),
       );
 
-      const built: AgentRequestPayload = usesDynamicFields
-        ? { ...buildDynamicAgentData(values, selectedAgentTypeInfo, agent), agent_name: values.agent_name }
-        : buildAgentDataFromForm(values, agent);
+      const built: AgentRequestPayload = withAgentAuth(
+        usesDynamicFields
+          ? { ...buildDynamicAgentData(values, selectedAgentTypeInfo, agent), agent_name: values.agent_name }
+          : buildAgentDataFromForm(values, agent),
+        values,
+        authSupport,
+        agent,
+      );
 
       const updateData = appliedDiscoveredSelection
         ? overlayDiscoveredCardParams(built, appliedDiscoveredSelection.selected_card)
@@ -520,6 +534,8 @@ const AgentInfoView: React.FC<AgentInfoViewProps> = ({ agentId, onClose, accessT
                         )}
 
                         <AgentIdentityFields accessToken={accessToken} />
+
+                        <AgentAuthSettings support={authSupport} />
 
                         {discoveryRequest && (
                           <div className="mt-4">

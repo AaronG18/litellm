@@ -9,21 +9,28 @@ admin pick which ones to expose through the proxy. The actual merge into a
 LiteLLM-fronted card happens when the agent is saved via ``POST /v1/agents``.
 """
 
-from typing import Final
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
+from typing import Annotated, Final, TypeAlias
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from litellm._logging import verbose_proxy_logger
+from litellm.constants import REDACTED_BY_LITELM_STRING
+from litellm.litellm_core_utils.url_utils import SSRFError, assert_same_origin
 from litellm.proxy._types import LitellmUserRoles, UserAPIKeyAuth
 from litellm.proxy.a2a.discovery import (
     AGENT_CARD_WELL_KNOWN_PATHS,
     AgentCardDiscoveryError,
     DiscoveryMode,
+    card_request_headers,
     fetch_well_known_card,
 )
 from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
+from litellm.proxy.common_utils.registry_read_through import get_agent_with_read_through
+from litellm.types.agents import AgentResponse
 from litellm.types.llms.base import LiteLLMBaseModel
 
 router: Final = APIRouter()
@@ -57,11 +64,72 @@ class DiscoverAgentRequest(LiteLLMBaseModel):
             "``{'assistant_id': <id>}``. ``well_known_fallback`` ignores this."
         ),
     )
+    api_key: str | None = Field(
+        default=None,
+        description=(
+            "The agent's ``litellm_params.api_key``, sent as ``Authorization: Bearer <api_key>``. "
+            f"``{REDACTED_BY_LITELM_STRING}`` reuses the key saved on ``agent_id``."
+        ),
+    )
+    static_headers: Mapping[str, str] | None = Field(
+        default=None,
+        description="The agent's ``static_headers``, combined with ``api_key`` the way the agent's runtime does.",
+    )
+    agent_id: str | None = Field(
+        default=None,
+        description="Saved agent whose key fills in a redacted ``api_key``, only for a ``url`` on that agent's origin.",
+    )
 
 
 class DiscoverAgentResponse(LiteLLMBaseModel):
     url: str
     agent_card: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class SavedKeyRefused:
+    pass
+
+
+SAVED_KEY_REFUSED_DETAIL: Final = (
+    "Re-enter the API key to test this connection. A saved key is only sent to its own agent's URL"
+)
+
+
+AgentLookup: TypeAlias = Callable[[str], Awaitable[AgentResponse | None]]
+
+
+def get_agent_lookup() -> AgentLookup:
+    return get_agent_with_read_through
+
+
+def _same_origin(url: str, saved_url: str) -> bool:
+    try:
+        assert_same_origin(url, saved_url)
+    except SSRFError:
+        return False
+    return True
+
+
+def _saved_urls(agent: AgentResponse) -> tuple[str, ...]:
+    params: Final[Mapping[str, object]] = agent.litellm_params or {}
+    card: Final[Mapping[str, object]] = agent.agent_card_params
+    candidates: Final = (params.get("api_base"), card.get("url"))
+    return tuple(url for url in candidates if isinstance(url, str) and url)
+
+
+async def _discovery_api_key(request: DiscoverAgentRequest, lookup: AgentLookup) -> str | None | SavedKeyRefused:
+    if request.api_key != REDACTED_BY_LITELM_STRING:
+        return request.api_key
+    agent: Final = await lookup(request.agent_id) if request.agent_id else None
+    if agent is None:
+        return SavedKeyRefused()
+    saved_urls: Final = _saved_urls(agent)
+    saved_key: Final = (agent.litellm_params or {}).get("api_key")
+    sends_to_saved_origin: Final = any(_same_origin(request.url, url) for url in saved_urls)
+    if not sends_to_saved_origin or not isinstance(saved_key, str) or not saved_key:
+        return SavedKeyRefused()
+    return saved_key
 
 
 @router.post(
@@ -72,6 +140,7 @@ class DiscoverAgentResponse(LiteLLMBaseModel):
 )
 async def discover_agent_card(
     request: DiscoverAgentRequest,
+    lookup: Annotated[AgentLookup, Depends(get_agent_lookup)],
     user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
 ) -> JSONResponse:
     """
@@ -95,11 +164,16 @@ async def discover_agent_card(
             detail=(f"Only proxy admins can discover agent cards. Your role={user_api_key_dict.user_role}"),
         )
 
+    api_key: Final = await _discovery_api_key(request, lookup)
+    if isinstance(api_key, SavedKeyRefused):
+        raise HTTPException(status_code=400, detail=SAVED_KEY_REFUSED_DETAIL)
+
     try:
         card: Final = await fetch_well_known_card(
             request.url,
             discovery_mode=request.discovery_mode,
             params=request.params,
+            headers=dict(card_request_headers(api_key, request.static_headers or {}, request.discovery_mode)),
         )
     except AgentCardDiscoveryError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
