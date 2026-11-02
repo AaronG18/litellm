@@ -101,7 +101,7 @@ export const NotificationsBellView: React.FC<NotificationsBellViewProps> = ({ cu
   return (
     <Popover>
       <PopoverTrigger
-        className="flex! h-9! w-9! items-center justify-center rounded-md! text-muted-foreground transition-colors hover:bg-accent! hover:text-foreground!"
+        className="flex! h-8! w-8! items-center justify-center rounded-md! text-muted-foreground transition-colors hover:bg-accent! hover:text-foreground!"
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
       >
         <span className="relative inline-flex">

@@ -29,6 +29,8 @@ import { Ellipsis } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { CommandPaletteTrigger } from "@/components/CommandPalette/CommandPaletteTrigger";
+import { VariantHeader } from "@/components/TopBar/TopBarVariants";
+import { useTopBarVariant } from "@/components/TopBar/useTopBarVariant";
 
 // Top bar for the dashboard shell. Sits only over the content column (the brand
 // lives in the sidebar header); mirrors the design's breadcrumb-left / tools-right layout.
@@ -36,11 +38,16 @@ export function DashboardHeader({
   accessToken,
   navigationTrigger,
   deploymentHealth,
+  sidebarCollapsed,
+  onToggleSidebar,
 }: {
   accessToken: string | null;
   navigationTrigger?: ReactNode;
   deploymentHealth?: ReactNode;
+  sidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
 }) {
+  const variant = useTopBarVariant();
   const term = useTerminology();
   const { title } = getBreadcrumb(usePathname());
   const isDesktop = useMediaQuery("(min-width: 768px)", { initializeWithValue: false });
@@ -57,6 +64,20 @@ export function DashboardHeader({
     localStorage.removeItem("litellm_worker_url");
     window.location.href = `${getLoginUrl()}?worker=${encodeURIComponent(workerId)}`;
   };
+
+  if (variant) {
+    return (
+      <VariantHeader
+        variant={variant}
+        accessToken={accessToken}
+        navigationTrigger={navigationTrigger}
+        deploymentHealth={deploymentHealth}
+        workerSwitch={showWorkerSwitch ? <WorkerDropdown onWorkerSwitch={handleWorkerSwitch} /> : undefined}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebar={onToggleSidebar}
+      />
+    );
+  }
 
   return (
     <header className="flex h-14 flex-none items-center justify-between gap-4 border-b border-border bg-background px-4 max-md:gap-2 max-md:px-2">

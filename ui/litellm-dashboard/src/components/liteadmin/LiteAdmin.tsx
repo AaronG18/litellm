@@ -170,7 +170,11 @@ export function LiteAdminHome() {
   );
 }
 
-export default function LiteAdminTrigger() {
+export default function LiteAdminTrigger({
+  className,
+  labelClassName,
+  avatarSize,
+}: { className?: string; labelClassName?: string; avatarSize?: number } = {}) {
   const state = useContext(LiteAdminContext);
   if (!state) return null;
   const { triggerRef, open, toggle } = state;
@@ -182,11 +186,16 @@ export default function LiteAdminTrigger() {
       aria-keyshortcuts="Meta+J Control+J"
       aria-expanded={open}
       onClick={toggle}
-      className="gap-2 rounded-full border border-blue-200/70 bg-blue-50/80 pl-1.5 pr-3 text-blue-700 hover:bg-blue-100 hover:text-blue-800 aria-expanded:bg-blue-100 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-300 dark:hover:bg-blue-400/20"
+      className={cn(
+        "gap-2 rounded-full border border-blue-200/70 bg-blue-50/80 pl-1.5 pr-3 text-blue-700 hover:bg-blue-100 hover:text-blue-800 aria-expanded:bg-blue-100 dark:border-blue-400/20 dark:bg-blue-400/10 dark:text-blue-300 dark:hover:bg-blue-400/20",
+        className,
+      )}
     >
-      <AriaAvatar />
-      <span className="hidden lg:inline">{ARIA_AGENT_LABEL}</span>
-      <Kbd className="hidden lg:inline-flex">⌘J</Kbd>
+      <AriaAvatar size={avatarSize} />
+      <span className={labelClassName ?? "hidden lg:inline"}>{ARIA_AGENT_LABEL}</span>
+      <Kbd className={labelClassName ? labelClassName.replaceAll(":inline", ":inline-flex") : "hidden lg:inline-flex"}>
+        ⌘J
+      </Kbd>
     </Button>
   );
 }

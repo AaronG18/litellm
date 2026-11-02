@@ -22,25 +22,34 @@ export const activeWarnings = (warnings: readonly DeploymentWarning[]): Deployme
 
 const pluralWarnings = (count: number): string => `${count} active ${count === 1 ? "warning" : "warnings"}`;
 
-export const DeploymentHealthIcon = ({ handle }: { handle: DeploymentHealthHandle }) => {
+export const DeploymentHealthIcon = ({
+  handle,
+  onlyWhenActive = false,
+}: {
+  handle: DeploymentHealthHandle;
+  onlyWhenActive?: boolean;
+}) => {
   const { canView } = useDeploymentHealthAccess();
   const { data } = useDeploymentWarnings();
   if (!canView) return null;
 
   const active = activeWarnings(data?.warnings ?? []);
+  if (onlyWhenActive && active.length === 0) return null;
   const hasCritical = active.some((warning) => warning.severity === "critical");
 
   return (
     <SheetTrigger
       handle={handle}
-      render={<Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground" />}
+      render={
+        <Button variant="ghost" size="icon-sm" className="relative text-muted-foreground hover:text-foreground" />
+      }
       aria-label={active.length > 0 ? `Deployment health, ${pluralWarnings(active.length)}` : "Deployment health"}
     >
       <Shield className="size-4" aria-hidden />
       {active.length > 0 ? (
         <Badge
           data-tone={hasCritical ? "error" : "neutral"}
-          className="absolute top-1 left-5 h-4 border-0 min-w-4 px-1 tabular-nums ring-2 ring-background data-[tone=error]:bg-destructive data-[tone=error]:text-white data-[tone=neutral]:bg-muted-foreground data-[tone=neutral]:text-background"
+          className="absolute top-0 left-4 h-4 border-0 min-w-4 px-1 tabular-nums ring-2 ring-background data-[tone=error]:bg-destructive data-[tone=error]:text-white data-[tone=neutral]:bg-muted-foreground data-[tone=neutral]:text-background"
           aria-hidden
         >
           {active.length}

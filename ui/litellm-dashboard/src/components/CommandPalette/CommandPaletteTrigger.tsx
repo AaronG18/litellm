@@ -4,12 +4,13 @@ import { Search } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
+import { cn } from "@/lib/cva.config";
 import { routeSegmentForPathname } from "@/utils/uiHref";
 import { paletteScopeForRoute } from "./utils";
 import { useCommandPalette } from "./CommandPaletteProvider";
 import { useShortcutLabel } from "./useShortcutLabel";
 
-export function CommandPaletteTrigger({ mobile = false }: { mobile?: boolean }) {
+export function CommandPaletteTrigger({ mobile = false, className }: { mobile?: boolean; className?: string }) {
   const pathname = usePathname();
   const { open, setOpen } = useCommandPalette();
   const shortcut = useShortcutLabel();
@@ -21,7 +22,7 @@ export function CommandPaletteTrigger({ mobile = false }: { mobile?: boolean }) 
       <Button
         variant="ghost"
         size="icon"
-        className="size-11 md:hidden"
+        className={className ?? "size-11 md:hidden"}
         aria-label="Search"
         aria-expanded={open}
         onClick={() => setOpen(true)}
@@ -34,7 +35,10 @@ export function CommandPaletteTrigger({ mobile = false }: { mobile?: boolean }) 
   return (
     <button
       type="button"
-      className="hidden h-8 w-64 shrink-0 items-center justify-between rounded-lg border border-border bg-muted/40 px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted lg:w-80 md:flex"
+      className={cn(
+        "h-8 shrink-0 items-center justify-between rounded-lg border border-border bg-muted/40 px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted",
+        className ?? "hidden w-64 lg:w-80 md:flex",
+      )}
       aria-label={label}
       aria-expanded={open}
       onClick={() => setOpen(true)}

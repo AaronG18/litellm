@@ -82,6 +82,8 @@ import {
 } from "../utils/roles";
 import BetaBadge from "./BetaBadge";
 import SidebarAccountMenu from "./SidebarAccountMenu/SidebarAccountMenu";
+import ViewSwitcher from "./Navbar/ViewSwitcher";
+import { useTopBarVariant } from "./TopBar/useTopBarVariant";
 import SidebarUsageCard from "./SidebarUsageCard";
 import { routeSegmentForPathname, uiHref } from "@/utils/uiHref";
 
@@ -545,6 +547,7 @@ const Sidebar_: React.FC<SidebarProps> = ({
   const isOrgAdmin = useIsOrgAdmin();
   const { data: teams } = useTeams();
   const { logoUrl, logoUrlDark } = useTheme();
+  const topBarVariant = useTopBarVariant();
   const [erroredDarkLogo, setErroredDarkLogo] = useState<string | null>(null);
   const { data: healthData } = useHealthReadinessDetails(accessToken);
   const logout = useLogout(accessToken);
@@ -693,42 +696,49 @@ const Sidebar_: React.FC<SidebarProps> = ({
 
   return (
     <Sidebar collapsed={collapsed}>
-      <SidebarHeader className="h-14 border-b border-border group-data-[collapsed=true]/sidebar:h-auto">
-        <div className="flex items-center justify-between gap-2 group-data-[collapsed=true]/sidebar:flex-col">
-          <div className="flex min-w-0 items-center gap-2">
-            <Link href={uiHref("")} className="flex min-w-0 items-center" aria-label="LiteLLM home">
-              <img src={logoSrc} alt="LiteLLM" className={cn(LOGO_CLASS_NAME, "dark:hidden")} />
-              <img
-                src={darkLogoSrc}
-                alt=""
-                aria-hidden
-                onError={() => setErroredDarkLogo(logoUrlDark)}
-                className={cn(LOGO_CLASS_NAME, "hidden dark:block")}
-              />
-            </Link>
-            {version && (
-              <Badge
-                variant="outline"
-                render={<a href="https://docs.litellm.ai/release_notes" target="_blank" rel="noopener noreferrer" />}
-                className="px-1.5 py-0 font-mono text-[10px] font-medium text-muted-foreground group-data-[collapsed=true]/sidebar:hidden"
+      {topBarVariant !== "v4" && (
+        <SidebarHeader className="h-14 border-b border-border group-data-[collapsed=true]/sidebar:h-auto">
+          <div className="flex items-center justify-between gap-2 group-data-[collapsed=true]/sidebar:flex-col">
+            <div className="flex min-w-0 items-center gap-2">
+              <Link href={uiHref("")} className="flex min-w-0 items-center" aria-label="LiteLLM home">
+                <img src={logoSrc} alt="LiteLLM" className={cn(LOGO_CLASS_NAME, "dark:hidden")} />
+                <img
+                  src={darkLogoSrc}
+                  alt=""
+                  aria-hidden
+                  onError={() => setErroredDarkLogo(logoUrlDark)}
+                  className={cn(LOGO_CLASS_NAME, "hidden dark:block")}
+                />
+              </Link>
+              {version && (
+                <Badge
+                  variant="outline"
+                  render={<a href="https://docs.litellm.ai/release_notes" target="_blank" rel="noopener noreferrer" />}
+                  className="px-1.5 py-0 font-mono text-[10px] font-medium text-muted-foreground group-data-[collapsed=true]/sidebar:hidden"
+                >
+                  v{version}
+                </Badge>
+              )}
+            </div>
+            {onToggleCollapsed && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={onToggleCollapsed}
+                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                className="flex-none text-muted-foreground"
               >
-                v{version}
-              </Badge>
+                {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+              </Button>
             )}
           </div>
-          {onToggleCollapsed && (
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={onToggleCollapsed}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="flex-none text-muted-foreground"
-            >
-              {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-            </Button>
-          )}
+        </SidebarHeader>
+      )}
+      {topBarVariant === "v5" && (
+        <div className="px-3 pt-3 group-data-[collapsed=true]/sidebar:px-2">
+          <ViewSwitcher className="w-full max-w-none justify-start [&_[data-slot=workspace-chevron]]:ml-auto group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0 group-data-[collapsed=true]/sidebar:[&_[data-slot=workspace-chevron]]:hidden group-data-[collapsed=true]/sidebar:[&_[data-slot=workspace-label]]:hidden" />
         </div>
-      </SidebarHeader>
+      )}
 
       <ScrollArea className="min-h-0 flex-1">
         <nav className="flex flex-col gap-0.5 px-3 pb-3">

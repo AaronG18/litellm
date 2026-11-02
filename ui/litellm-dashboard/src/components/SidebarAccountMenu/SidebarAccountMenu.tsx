@@ -20,6 +20,7 @@ import { uiHref } from "@/utils/uiHref";
 import { isProxyAdminRole } from "@/utils/roles";
 import { ChevronsUpDown, Crown, IdCard, KeyRound, LogOut, Mail, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useTheme as useColorTheme } from "next-themes";
 import React from "react";
 
 const RELEASE_NOTES_URL = "https://docs.litellm.ai/release_notes";
@@ -116,7 +117,15 @@ const SidebarAccountMenu: React.FC<SidebarAccountMenuProps> = ({ onLogout, colla
     emitLocalStorageChange(key);
   };
 
+  const { resolvedTheme, setTheme } = useColorTheme();
   const toggles = [
+    {
+      key: "darkMode",
+      label: "Dark Mode",
+      ariaLabel: "Toggle dark mode",
+      checked: resolvedTheme === "dark",
+      onCheckedChange: (checked: boolean) => setTheme(checked ? "dark" : "light"),
+    },
     {
       key: "disableShowNewBadge",
       label: "Hide New Feature Indicators",
