@@ -3466,6 +3466,7 @@ class _WebsocketRelay(Protocol):
         client_frame_model_gate: WebsocketFrameModelGate | None = None,
         upstream_frame_kind: WebsocketUpstreamFrameClassifier | None = None,
         meter: WebSocketSessionMeter | None = None,
+        model: str | None = None,
     ) -> None: ...
 
 
@@ -3718,6 +3719,7 @@ async def deepgram_listen_websocket_route(
         forward_headers=False,
         endpoint=websocket.url.path,
         accept_websocket=False,
+        model=deepgram_listen_requested_model(websocket.url.query),
     )
 
 
@@ -3766,6 +3768,7 @@ async def deepgram_speak_websocket_route(
         endpoint=websocket.url.path,
         accept_websocket=False,
         meter=DeepgramSpeakMeter(target, character_rate),
+        model=deepgram_speak_requested_model(websocket.url.query),
     )
 
 

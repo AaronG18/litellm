@@ -3025,7 +3025,7 @@ async def websocket_passthrough_request(
     builtin_provider_route: bool = False,
     model: str | None = None,
     meter: WebSocketSessionMeter | None = None,
-):
+) -> None:
     """
     WebSocket passthrough request handler.
 
@@ -3044,7 +3044,8 @@ async def websocket_passthrough_request(
         walkout_turn_drain_seconds: How long to keep reading a turn the provider is still running after the client
             left or was refused, so the provider's usage for it still reaches spend
         builtin_provider_route: Whether a built-in provider route serves the connection, so its URL names the provider
-        model: The model the caller named before connecting, logged on a failure before the setup frame arrives
+        model: The model the route checked the key against before connecting. Pre-call hooks such as per-model rate
+            limits apply to it, and a failure before the setup frame arrives is logged with it
         meter: Prices the session from the client text frames delivered upstream, for an upstream that reports no usage
     """
     from litellm.litellm_core_utils.litellm_logging import Logging
@@ -3254,15 +3255,37 @@ async def websocket_passthrough_request(
             log_frames(turn_logging, turn_payload, turn_kwargs, end_time, lane, in_row)
         ledger.close_turn(lane, end_time)
 
+    async def report_failure(exception: Exception, request_body: Mapping[str, object] | None) -> HTTPException | None:
+        return await proxy_logging_obj.post_call_failure_hook(
+            user_api_key_dict=user_api_key_dict,
+            original_exception=exception,
+            request_data=_build_passthrough_failure_request_payload(
+                parsed_body=None if request_body is None else dict(request_body),
+                kwargs=kwargs,
+                logging_obj=logging_obj,
+                custom_llm_provider=None,
+                url=httpx.URL(target),
+                builtin_provider_route=builtin_provider_route,
+            ),
+            traceback_str=traceback.format_exc(limit=MAXIMUM_TRACEBACK_LINES_TO_LOG),
+        )
+
     ### CALL HOOKS ### - modify incoming data / reject request before calling the model
     websocket_hook_data: Final = guardrail_request_data_with_streaming(
-        MappingProxyType({"litellm_call_id": litellm_call_id}), is_streaming=True
+        MappingProxyType({"litellm_call_id": litellm_call_id, **({} if model is None else {"model": model})}),
+        is_streaming=True,
     )
-    await proxy_logging_obj.pre_call_hook(
-        user_api_key_dict=user_api_key_dict,
-        data=websocket_hook_data,
-        call_type="pass_through_endpoint",
-    )
+    try:
+        await proxy_logging_obj.pre_call_hook(
+            user_api_key_dict=user_api_key_dict,
+            data=websocket_hook_data,
+            call_type="pass_through_endpoint",
+        )
+    except Exception as refusal:
+        replacement: Final = await report_failure(refusal, websocket_hook_data)
+        if replacement is not None:
+            raise replacement from refusal
+        raise
 
     try:
         verbose_proxy_logger.debug(
@@ -3518,21 +3541,7 @@ async def websocket_passthrough_request(
     except InvalidStatus as exc:
         verbose_proxy_logger.exception("WebSocket passthrough (%s): upstream rejected WebSocket connection", endpoint)
 
-        await proxy_logging_obj.post_call_failure_hook(
-            user_api_key_dict=user_api_key_dict,
-            original_exception=exc,
-            request_data=_build_passthrough_failure_request_payload(
-                parsed_body=None if model is None else {"model": model},
-                kwargs=kwargs,
-                logging_obj=logging_obj,
-                custom_llm_provider=None,
-                url=httpx.URL(target),
-                builtin_provider_route=builtin_provider_route,
-            ),
-            traceback_str=traceback.format_exc(
-                limit=MAXIMUM_TRACEBACK_LINES_TO_LOG,
-            ),
-        )
+        await report_failure(exc, None if model is None else {"model": model})
 
         if _client_socket_is_open(websocket):
             await websocket.close(
@@ -3544,21 +3553,7 @@ async def websocket_passthrough_request(
             "WebSocket passthrough (%s): unexpected error while proxying WebSocket", endpoint
         )
 
-        await proxy_logging_obj.post_call_failure_hook(
-            user_api_key_dict=user_api_key_dict,
-            original_exception=e,
-            request_data=_build_passthrough_failure_request_payload(
-                parsed_body=None if model is None else {"model": model},
-                kwargs=kwargs,
-                logging_obj=logging_obj,
-                custom_llm_provider=None,
-                url=httpx.URL(target),
-                builtin_provider_route=builtin_provider_route,
-            ),
-            traceback_str=traceback.format_exc(
-                limit=MAXIMUM_TRACEBACK_LINES_TO_LOG,
-            ),
-        )
+        await report_failure(e, None if model is None else {"model": model})
 
         if _client_socket_is_open(websocket):
             await websocket.close(code=1011, reason="WebSocket passthrough error")

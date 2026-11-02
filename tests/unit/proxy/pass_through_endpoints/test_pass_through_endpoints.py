@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sys
+import traceback
 import uuid
 import zlib
 from collections.abc import AsyncIterator, Callable, Mapping, Sequence
@@ -32,7 +33,13 @@ from starlette.datastructures import UploadFile as StarletteUploadFile
 import litellm
 from litellm._logging import verbose_proxy_logger
 from litellm.caching.dual_cache import DualCache
-from litellm.constants import ANTHROPIC_COMPATIBLE_MAX_USER_ID_LENGTH, ANTHROPIC_MAX_USER_ID_LENGTH, DEFAULT_REQUEST_TIMEOUT_SECONDS
+from litellm.constants import (
+    ANTHROPIC_COMPATIBLE_MAX_USER_ID_LENGTH,
+    ANTHROPIC_MAX_USER_ID_LENGTH,
+    DEFAULT_REQUEST_TIMEOUT_SECONDS,
+    SERVER_STREAMING_CLASSIFICATION_KEY,
+    SERVER_STREAMING_CLASSIFICATION_MARKER,
+)
 from litellm.integrations.custom_guardrail import CustomGuardrail
 from litellm.integrations.custom_logger import CustomLogger
 from litellm.integrations.prometheus import PrometheusLogger
@@ -7648,6 +7655,164 @@ async def test_websocket_passthrough_relays_upstream_policy_close_to_client():
         )
 
     websocket.close.assert_awaited_once_with(code=1008, reason=upstream_reason)
+
+
+class _UpstreamDials:
+    def __init__(self) -> None:
+        self.targets: tuple[str, ...] = ()
+
+    def dial(self, target: str, additional_headers: Mapping[str, str]) -> FakeUpstreamConnect:
+        self.targets = (*self.targets, target)
+        return FakeUpstreamConnect(FakeUpstreamWebSocket())
+
+
+def _record_upstream_dials(monkeypatch: pytest.MonkeyPatch) -> _UpstreamDials:
+    dials: Final = _UpstreamDials()
+    monkeypatch.setattr("litellm.proxy.pass_through_endpoints.pass_through_endpoints.connect", dials.dial)
+    return dials
+
+
+async def _relay_one_client_session(caller: UserAPIKeyAuth, model: str | None) -> None:
+    await websocket_passthrough_request(
+        websocket=_client_websocket(AsyncMock(return_value={"type": "websocket.disconnect"})),
+        target="wss://upstream.example.test/v1/speak",
+        custom_headers={},
+        user_api_key_dict=caller,
+        forward_headers=False,
+        endpoint="/ws-model-rpm",
+        accept_websocket=False,
+        model=model,
+    )
+
+
+class _PreCallDataRecorder(CustomLogger):
+    def __init__(self) -> None:
+        super().__init__()
+        self.data: tuple[Mapping[str, object], ...] = ()
+
+    async def async_pre_call_hook(
+        self,
+        user_api_key_dict: UserAPIKeyAuth,
+        cache: DualCache,
+        data: dict[str, object],
+        call_type: str,
+    ) -> None:
+        self.data = (*self.data, MappingProxyType(dict(data)))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("model", "hook_data"),
+    [
+        pytest.param(
+            None,
+            {SERVER_STREAMING_CLASSIFICATION_KEY: SERVER_STREAMING_CLASSIFICATION_MARKER},
+            id="route authorized no model",
+        ),
+        pytest.param(
+            "nova-3",
+            {"model": "nova-3", SERVER_STREAMING_CLASSIFICATION_KEY: SERVER_STREAMING_CLASSIFICATION_MARKER},
+            id="route authorized nova-3",
+        ),
+    ],
+)
+async def test_websocket_passthrough_hands_pre_call_hooks_exactly_the_model_it_was_given(
+    model: str | None, hook_data: Mapping[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from litellm.proxy import proxy_server
+    from litellm.proxy.proxy_server import user_api_key_cache
+
+    recorder: Final = _PreCallDataRecorder()
+    monkeypatch.setattr(litellm, "callbacks", [recorder])
+    monkeypatch.setattr(proxy_server, "proxy_logging_obj", ProxyLogging(user_api_key_cache=user_api_key_cache))
+    _record_upstream_dials(monkeypatch)
+
+    await _relay_one_client_session(UserAPIKeyAuth(), model)
+
+    assert tuple(
+        {key: value for key, value in data.items() if key != "litellm_call_id"} for data in recorder.data
+    ) == (hook_data,)
+
+
+class _RefusingPreCallHook(CustomLogger):
+    def __init__(self, refusal: HTTPException) -> None:
+        super().__init__()
+        self.refusal = refusal
+
+    async def async_pre_call_hook(
+        self,
+        user_api_key_dict: UserAPIKeyAuth,
+        cache: DualCache,
+        data: dict[str, object],
+        call_type: str,
+    ) -> None:
+        data["guardrail_seen"] = "pii-guard"  # rebind-ok: the guardrail-style write this test traces
+        raise self.refusal
+
+
+@pytest.mark.asyncio
+async def test_websocket_passthrough_reports_a_pre_call_refusal_to_the_failure_hooks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from litellm.proxy import proxy_server
+    from litellm.proxy.proxy_server import user_api_key_cache
+
+    refusal: Final = HTTPException(status_code=429, detail="Rate limit exceeded")
+    recorder: Final = _FailureHookRecorder()
+    monkeypatch.setattr(litellm, "callbacks", [_RefusingPreCallHook(refusal), recorder])
+    monkeypatch.setattr(proxy_server, "proxy_logging_obj", ProxyLogging(user_api_key_cache=user_api_key_cache))
+    dialed: Final = _record_upstream_dials(monkeypatch)
+
+    with pytest.raises(HTTPException) as raised:
+        await _relay_one_client_session(UserAPIKeyAuth(), "nova-3")
+
+    assert raised.value is refusal
+    assert (
+        [failure.original_exception for failure in recorder.failures],
+        [(failure.request_data["model"], failure.request_data["guardrail_seen"]) for failure in recorder.failures],
+        [str(failure.traceback_str).splitlines()[-1] for failure in recorder.failures],
+        dialed.targets,
+    ) == (
+        [refusal],
+        [("nova-3", "pii-guard")],
+        ["".join(traceback.format_exception_only(refusal)).strip()],
+        (),
+    )
+
+
+class _RewritingFailureHook(CustomLogger):
+    def __init__(self, replacement: HTTPException) -> None:
+        super().__init__()
+        self.replacement = replacement
+
+    async def async_post_call_failure_hook(
+        self,
+        request_data: dict[str, object],
+        original_exception: Exception,
+        user_api_key_dict: UserAPIKeyAuth,
+        traceback_str: str | None = None,
+    ) -> HTTPException:
+        return self.replacement
+
+
+@pytest.mark.asyncio
+async def test_websocket_passthrough_raises_the_failure_hooks_replacement_for_a_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from litellm.proxy import proxy_server
+    from litellm.proxy.proxy_server import user_api_key_cache
+
+    refusal: Final = HTTPException(status_code=429, detail="Rate limit exceeded for model_per_key: internal detail")
+    replacement: Final = HTTPException(status_code=429, detail="Too many sessions, try again later")
+    monkeypatch.setattr(litellm, "callbacks", [_RefusingPreCallHook(refusal), _RewritingFailureHook(replacement)])
+    monkeypatch.setattr(proxy_server, "proxy_logging_obj", ProxyLogging(user_api_key_cache=user_api_key_cache))
+    _record_upstream_dials(monkeypatch)
+
+    with pytest.raises(HTTPException) as raised:
+        await _relay_one_client_session(UserAPIKeyAuth(), "nova-3")
+
+    assert raised.value is replacement
+    assert raised.value.__cause__ is refusal
 
 
 @pytest.mark.asyncio
