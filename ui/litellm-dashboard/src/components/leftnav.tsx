@@ -735,18 +735,18 @@ const Sidebar_: React.FC<SidebarProps> = ({
           </div>
         </SidebarHeader>
       )}
-      {topBarVariant === "v6" && (
+      {(topBarVariant === "v5" || topBarVariant === "v7") && (
+        <div className="px-3 pt-3 group-data-[collapsed=true]/sidebar:px-2">
+          <ViewSwitcher className="w-full max-w-none justify-start [&_[data-slot=workspace-chevron]]:ml-auto group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0 group-data-[collapsed=true]/sidebar:[&_[data-slot=workspace-chevron]]:hidden group-data-[collapsed=true]/sidebar:[&_[data-slot=workspace-label]]:hidden" />
+        </div>
+      )}
+      {(topBarVariant === "v6" || topBarVariant === "v7") && (
         <div className="px-3 pt-3 group-data-[collapsed=true]/sidebar:px-2">
           <LiteAdminTrigger
             avatarSize={22}
-            className="h-9 w-full justify-start gap-2 rounded-lg border-transparent bg-transparent px-2 font-medium text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground aria-expanded:bg-sidebar-accent dark:border-transparent dark:bg-transparent dark:text-sidebar-foreground [&_kbd]:ml-auto group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0"
+            className="h-9 w-full justify-start gap-2 rounded-lg border-transparent bg-transparent px-2 font-medium text-sidebar-foreground hover:bg-sidebar-accent aria-expanded:bg-sidebar-accent dark:border-transparent dark:bg-transparent dark:text-sidebar-foreground [&_kbd]:ml-auto group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0"
             labelClassName="inline group-data-[collapsed=true]/sidebar:hidden"
           />
-        </div>
-      )}
-      {topBarVariant === "v5" && (
-        <div className="px-3 pt-3 group-data-[collapsed=true]/sidebar:px-2">
-          <ViewSwitcher className="w-full max-w-none justify-start [&_[data-slot=workspace-chevron]]:ml-auto group-data-[collapsed=true]/sidebar:justify-center group-data-[collapsed=true]/sidebar:px-0 group-data-[collapsed=true]/sidebar:[&_[data-slot=workspace-chevron]]:hidden group-data-[collapsed=true]/sidebar:[&_[data-slot=workspace-label]]:hidden" />
         </div>
       )}
 

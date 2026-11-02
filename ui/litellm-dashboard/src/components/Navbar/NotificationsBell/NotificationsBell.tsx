@@ -88,6 +88,41 @@ const AnnouncementItem: React.FC<{ announcement: Announcement }> = ({ announceme
   );
 };
 
+const CompactAnnouncementItem: React.FC<{ announcement: Announcement }> = ({ announcement }) => {
+  const read = useAnnouncementRead(announcement.readKey);
+  return (
+    <article aria-label={announcement.title} className="flex gap-3 px-4 py-3">
+      <span
+        aria-hidden
+        className={cn("mt-1.5 size-2 flex-none rounded-full", read ? "bg-transparent" : "bg-primary")}
+      />
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className="text-sm font-medium leading-snug">{announcement.title}</p>
+        <p className="text-xs leading-snug text-muted-foreground">{announcement.description}</p>
+        <div className="flex items-center gap-3 pt-0.5 text-xs">
+          <a
+            className="font-medium text-primary hover:underline"
+            href={announcement.href}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {announcement.linkLabel}
+          </a>
+          {read ? null : (
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => markAnnouncementRead(announcement.readKey)}
+            >
+              Mark as read
+            </button>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+};
+
 interface NotificationsBellViewProps {
   currentVersion: string | null | undefined;
   latestRelease: LatestReleaseInfo | null | undefined;
@@ -114,15 +149,29 @@ export const NotificationsBellView: React.FC<NotificationsBellViewProps> = ({
           {unreadCount > 0 ? <Badge className="absolute -top-0.5 -right-1 size-1.5 p-0" aria-hidden /> : null}
         </span>
       </PopoverTrigger>
-      <PopoverContent align="end" aria-label="Notifications" className={footer ? "w-96" : undefined}>
-        {announcements.map((announcement, index) => (
-          <Fragment key={announcement.readKey}>
-            {index > 0 ? <Separator /> : null}
-            <AnnouncementItem announcement={announcement} />
-          </Fragment>
-        ))}
-        {footer}
-      </PopoverContent>
+      {footer ? (
+        <PopoverContent align="end" aria-label="Notifications" className="w-[360px] gap-0 overflow-hidden p-0">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <p className="text-sm font-semibold">What&apos;s new</p>
+            {unreadCount > 0 ? <span className="text-xs text-muted-foreground">{unreadCount} unread</span> : null}
+          </div>
+          <div className="flex flex-col divide-y divide-border">
+            {announcements.map((announcement) => (
+              <CompactAnnouncementItem key={announcement.readKey} announcement={announcement} />
+            ))}
+          </div>
+          {footer}
+        </PopoverContent>
+      ) : (
+        <PopoverContent align="end" aria-label="Notifications">
+          {announcements.map((announcement, index) => (
+            <Fragment key={announcement.readKey}>
+              {index > 0 ? <Separator /> : null}
+              <AnnouncementItem announcement={announcement} />
+            </Fragment>
+          ))}
+        </PopoverContent>
+      )}
     </Popover>
   );
 };

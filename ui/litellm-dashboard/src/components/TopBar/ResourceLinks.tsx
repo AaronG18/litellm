@@ -3,7 +3,6 @@
 import { useDisableBlogPosts } from "@/app/(dashboard)/hooks/useDisableBlogPosts";
 import { useDisableShowPrompts } from "@/app/(dashboard)/hooks/useDisableShowPrompts";
 import { useBlogPosts } from "@/app/(dashboard)/hooks/blogPosts/useBlogPosts";
-import { Separator } from "@/components/ui/separator";
 import { DOCS_URL } from "@/components/Navbar/DocsLink/DocsLink";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -36,7 +35,7 @@ function DiscordIcon({ className }: { className?: string }) {
 
 const PRODUCT_LINKS: readonly ResourceLink[] = [
   { href: DOCS_URL, label: "Documentation", short: "Docs", Icon: BookOpen },
-  { href: "https://docs.litellm.ai/release_notes", label: "Release notes", Icon: ScrollText },
+  { href: "https://docs.litellm.ai/release_notes", label: "Release notes", short: "Releases", Icon: ScrollText },
 ];
 const BLOG_LINK: ResourceLink = { href: "https://docs.litellm.ai/blog", label: "Blog", Icon: Newspaper };
 const COMMUNITY_LINKS: readonly ResourceLink[] = [
@@ -174,34 +173,43 @@ export function BellResources() {
   return (
     <>
       {posts.length > 0 && (
-        <>
-          <Separator />
-          <section aria-label="From the blog" className="flex flex-col gap-1">
+        <section aria-label="From the blog" className="flex flex-col border-t border-border px-2 py-2">
+          <div className="flex items-center justify-between px-2 py-1">
             <p className="text-xs font-medium text-muted-foreground">From the blog</p>
-            {posts.map((post) => (
-              <a
-                key={post.url}
-                href={post.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="-mx-2 flex items-baseline justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-              >
-                <span className="line-clamp-1">{post.title}</span>
-                <span className="flex-none text-xs text-muted-foreground">{formatPostDate(post.date)}</span>
-              </a>
-            ))}
-          </section>
-        </>
+            <a
+              href={BLOG_LINK.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              View all
+            </a>
+          </div>
+          {posts.map((post) => (
+            <a
+              key={post.url}
+              href={post.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-baseline justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+            >
+              <span className="line-clamp-1">{post.title}</span>
+              <span className="flex-none text-xs text-muted-foreground">{formatPostDate(post.date)}</span>
+            </a>
+          ))}
+        </section>
       )}
-      <Separator />
-      <nav aria-label="Help and resources" className="-mx-1 flex flex-wrap items-center gap-0.5">
+      <nav
+        aria-label="Help and resources"
+        className="grid grid-cols-3 gap-0.5 border-t border-border bg-muted/40 p-1.5"
+      >
         {groups.flat().map(({ href, label, short, Icon }) => (
           <a
             key={href}
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "px-2 text-muted-foreground")}
+            className="flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground [&_svg]:size-3.5"
           >
             <Icon />
             {short ?? label}
