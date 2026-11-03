@@ -56,10 +56,11 @@ fn content_length(head: &Head) -> usize {
 }
 
 /// RFC 9112 section 6.3: Transfer-Encoding overrides Content-Length. Forwarding both would let
-/// Python split the stream at a different place than Rust did.
+/// Python split the stream at a different place than Rust did. Section 6.1 then closes the
+/// connection after the response, so a request smuggled behind it never runs.
 #[rstest]
 #[tokio::test]
-async fn a_request_framed_two_ways_reaches_python_framed_by_transfer_encoding() {
+async fn a_request_framed_two_ways_reaches_python_framed_by_transfer_encoding_and_closes() {
     let (upstream, mut received) = capturing().await;
     let gateway = Gateway::start(upstream).await;
     let mut raw = gateway.connect().await;
@@ -70,10 +71,7 @@ async fn a_request_framed_two_ways_reaches_python_framed_by_transfer_encoding() 
         StatusCode::OK
     );
     raw.body(2).await;
-    assert_eq!(
-        within(raw.response_head()).await.unwrap().status,
-        StatusCode::OK
-    );
+    within(raw.until_closed()).await;
 
     let upload = received.recv().await.unwrap();
     assert_eq!(upload.head.header("content-length"), None);
@@ -82,7 +80,7 @@ async fn a_request_framed_two_ways_reaches_python_framed_by_transfer_encoding() 
         Some(&b"chunked"[..])
     );
     assert_eq!(upload.body, b"hello");
-    assert_eq!(received.recv().await.unwrap().head.path, "/next");
+    assert!(received.try_recv().is_err(), "python ran the smuggled request");
 }
 
 #[rstest]
