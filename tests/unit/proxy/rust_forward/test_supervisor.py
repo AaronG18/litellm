@@ -1,5 +1,7 @@
 import functools
 import signal
+import socket
+import sys
 from pathlib import Path
 from typing import Final
 
@@ -11,6 +13,7 @@ from litellm.proxy.rust_forward.mode import Supervised, rust_forward_mode
 from litellm.proxy.rust_forward.server import Listener, PythonServer, Server
 from litellm.proxy.rust_forward.supervisor import (
     Child,
+    Draining,
     Event,
     ExitCode,
     Exited,
@@ -21,6 +24,7 @@ from litellm.proxy.rust_forward.supervisor import (
     State,
     Stop,
     gateway_binary,
+    private_listener,
     python_spec,
     rust_spec,
     startup_check,
@@ -112,49 +116,52 @@ def test_binary_is_found_only_in_the_environment_scripts_dir(tmp_path: Path, mon
     assert gateway_binary(str(elsewhere)) == str(binary)
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="macOS caps every listen backlog at kern.ipc.somaxconn, 128")
+def test_private_listener_queues_a_startup_burst_while_python_boots() -> None:
+    with private_listener() as listener:
+        clients: Final = tuple(socket.create_connection(listener.getsockname(), timeout=1) for _ in range(512))
+        queued: Final = tuple(listener.accept()[0] for _ in clients)
+        assert {peer.getpeername() for peer in queued} == {client.getsockname() for client in clients}
+        for connection in (*clients, *queued):
+            connection.close()
+
+
 def _fold(events: tuple[Event, ...]) -> tuple[State, tuple[Signal, ...]]:
     def advance(acc: tuple[State, tuple[Signal, ...]], event: Event) -> tuple[State, tuple[Signal, ...]]:
         state, sent = acc
-        following, action = step(state, event)
-        return following, sent if action is None else (*sent, action)
+        following, signals = step(state, event)
+        return following, (*sent, *signals)
 
     return functools.reduce(advance, events, (Running(), ()))
 
 
 RUST: Final = Child.RUST
 PYTHON: Final = Child.PYTHON
+BOTH_TERM: Final = (Signal(RUST, TERM), Signal(PYTHON, TERM))
 
 
 @pytest.mark.parametrize(
     ("events", "signals", "code"),
     [
-        (
-            (Stop(TERM), Exited(RUST, 0), Exited(PYTHON, 0)),
-            (Signal(RUST, TERM), Signal(PYTHON, TERM)),
-            ExitCode.CLEAN,
-        ),
-        ((Exited(PYTHON, 0),), (), ExitCode.CHILD_FAILED),
-        ((Exited(RUST, 1),), (), ExitCode.CHILD_FAILED),
-        ((Stop(TERM), Exited(PYTHON, 0)), (Signal(RUST, TERM),), ExitCode.CHILD_FAILED),
-        ((Stop(TERM), Exited(RUST, 1)), (Signal(RUST, TERM),), ExitCode.CHILD_FAILED),
-        (
-            (Stop(TERM), Exited(RUST, 0), Exited(PYTHON, 1)),
-            (Signal(RUST, TERM), Signal(PYTHON, TERM)),
-            ExitCode.CHILD_FAILED,
-        ),
+        ((Stop(TERM),), BOTH_TERM, None),
+        ((Stop(TERM), Exited(RUST, 0), Exited(PYTHON, 0)), BOTH_TERM, ExitCode.CLEAN),
+        ((Stop(TERM), Exited(PYTHON, 0), Exited(RUST, 0)), BOTH_TERM, ExitCode.CLEAN),
         (
             (Stop(INT), Stop(INT), Exited(RUST, 0), Exited(PYTHON, 0)),
             (Signal(RUST, INT), Signal(PYTHON, INT)),
             ExitCode.CLEAN,
         ),
-        (
-            (Exited(RUST, 1), Stop(TERM), Exited(PYTHON, 0)),
-            (),
-            ExitCode.CHILD_FAILED,
-        ),
+        ((Stop(TERM), Exited(RUST, 0), Exited(RUST, 0)), BOTH_TERM, ExitCode.CHILD_FAILED),
+        ((Stop(TERM), Exited(RUST, 1)), BOTH_TERM, ExitCode.CHILD_FAILED),
+        ((Stop(TERM), Exited(RUST, 0), Exited(PYTHON, 1)), BOTH_TERM, ExitCode.CHILD_FAILED),
+        ((Exited(PYTHON, 0),), (), ExitCode.CHILD_FAILED),
+        ((Exited(RUST, 1),), (), ExitCode.CHILD_FAILED),
+        ((Exited(RUST, 1), Stop(TERM), Exited(PYTHON, 0)), (), ExitCode.CHILD_FAILED),
     ],
 )
-def test_supervisor_drains_rust_before_python_and_fails_on_unasked_exit(
-    events: tuple[Event, ...], signals: tuple[Signal, ...], code: ExitCode
+def test_supervisor_stops_both_children_at_once_and_fails_on_unasked_exit(
+    events: tuple[Event, ...], signals: tuple[Signal, ...], code: ExitCode | None
 ) -> None:
-    assert _fold(events) == (Finished(code), signals)
+    state, sent = _fold(events)
+    assert sent == signals
+    assert state == (Draining(frozenset({RUST, PYTHON})) if code is None else Finished(code))

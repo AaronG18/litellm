@@ -844,7 +844,8 @@ class ProxyInitializationHelpers:
         run_granian: bool,
         tls: bool,
     ) -> "PythonServer":
-        """``run_gunicorn_server`` never hands ``--keepalive_timeout`` to gunicorn, so its workers keep gunicorn's."""
+        """``run_gunicorn_server`` never hands ``--keepalive_timeout`` or forwarded IPs to gunicorn, so its workers keep
+        gunicorn's keep-alive and gunicorn's trusted proxies, which include ``::1`` where uvicorn's do not."""
         import uvicorn
         from gunicorn.config import Config as GunicornConfig
 
@@ -875,7 +876,9 @@ class ProxyInitializationHelpers:
             keepalive_seconds=keepalive,
             graceful_timeout_seconds=GracefulShutdownManager.get_timeout(),
             proxy_headers=True,
-            trusted_proxies=None,
+            trusted_proxies=",".join(TypeAdapter(list[str]).validate_python(GunicornConfig().forwarded_allow_ips))
+            if server is Server.GUNICORN
+            else None,
         )
 
     @staticmethod

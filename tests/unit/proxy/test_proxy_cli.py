@@ -4238,6 +4238,26 @@ class TestRustForwardServer:
         _, server = self._server(["--run_gunicorn", "--keepalive_timeout", "9"])
         assert server.keepalive_seconds == GunicornConfig().keepalive
 
+    @pytest.mark.parametrize("gunicorn", [True, False])
+    def test_python_behind_rust_trusts_the_proxies_its_server_would_have(
+        self, gunicorn: bool, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from gunicorn.config import Config as GunicornConfig
+
+        from litellm.proxy.rust_forward.mode import Supervised, rust_forward_mode
+        from litellm.proxy.rust_forward.supervisor import python_spec
+
+        monkeypatch.delenv("FORWARDED_ALLOW_IPS", raising=False)
+        _, server = self._server(["--run_gunicorn"] if gunicorn else [])
+        mode: Final = rust_forward_mode(python_spec(("litellm",), 17, 45555, server, {}).env)
+        trusted: Final = (
+            GunicornConfig().forwarded_allow_ips
+            if gunicorn
+            else [uvicorn.Config(app="", log_config=None).forwarded_allow_ips]
+        )
+        assert isinstance(mode, Supervised)
+        assert mode.trusted_proxies.split(",") == trusted
+
     def test_rust_drains_for_the_graceful_timeout_uvicorn_runs_with(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GRACEFUL_SHUTDOWN_TIMEOUT", "12.5")
         _, server = self._server([])

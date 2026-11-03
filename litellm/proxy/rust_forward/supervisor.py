@@ -21,6 +21,9 @@ from litellm.proxy.rust_forward.server import Listener, PythonServer, Server
 from litellm.rust_bridge.configuration import ENV_NAME
 
 _ADDRESS: Final = TypeAdapter(tuple[str, int])
+# What uvicorn and gunicorn listen with once they boot. Rust accepts traffic while Python is still booting, so the
+# private socket needs it from the start; `listen()` alone queues at most 128 and refuses a startup burst.
+PRIVATE_BACKLOG: Final = 2048
 
 
 def gateway_binary(scripts_dir: str) -> str | None:
@@ -52,7 +55,10 @@ class Child(Enum):
     PYTHON = "python"
 
 
-DRAIN_ORDER: Final = (Child.RUST, Child.PYTHON)
+# Both stop at once, as Python alone did. Python ends its long streams within its graceful timeout, which Rust's drain
+# already covers, so stopping Python only after Rust exits would hold Python's shutdown, spend flush included, behind
+# streams only Python can end. Rust goes first so it stops accepting before Python does.
+SHUTDOWN_ORDER: Final = (Child.RUST, Child.PYTHON)
 
 
 class ExitCode(IntEnum):
@@ -78,9 +84,7 @@ class Running:
 
 @dataclass(frozen=True, slots=True)
 class Draining:
-    signum: signal.Signals
-    signalled: Child
-    remaining: tuple[Child, ...]
+    running: frozenset[Child]
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,34 +102,29 @@ Event: TypeAlias = Stop | Exited
 State: TypeAlias = Running | Draining | Finished
 
 
-def _signal_next(signum: signal.Signals, order: tuple[Child, ...]) -> tuple[State, Signal | None]:
-    if not order:
-        return Finished(ExitCode.CLEAN), None
-    return Draining(signum, order[0], order[1:]), Signal(order[0], signum)
-
-
-def step(state: State, event: Event) -> tuple[State, Signal | None]:
+def step(state: State, event: Event) -> tuple[State, tuple[Signal, ...]]:
     match state:
         case Running():
             match event:
                 case Stop(signum):
-                    return _signal_next(signum, DRAIN_ORDER)
+                    return Draining(frozenset(SHUTDOWN_ORDER)), tuple(Signal(child, signum) for child in SHUTDOWN_ORDER)
                 case Exited():
-                    return Finished(ExitCode.CHILD_FAILED), None
+                    return Finished(ExitCode.CHILD_FAILED), ()
                 case _:
                     assert_never(event)
-        case Draining(signum, signalled, remaining):
+        case Draining(running):
             match event:
                 case Stop():
-                    return state, None
-                case Exited(child, code) if child is signalled and code == 0:
-                    return _signal_next(signum, remaining)
+                    return state, ()
+                case Exited(child, code) if child in running and code == 0:
+                    remaining: Final = running - {child}
+                    return (Draining(remaining) if remaining else Finished(ExitCode.CLEAN)), ()
                 case Exited():
-                    return Finished(ExitCode.CHILD_FAILED), None
+                    return Finished(ExitCode.CHILD_FAILED), ()
                 case _:
                     assert_never(event)
         case Finished():
-            return state, None
+            return state, ()
         case _:
             assert_never(state)
 
@@ -168,6 +167,13 @@ def rust_spec(binary: str, upstream_port: int, server: PythonServer, environ: Ma
     )
 
 
+def private_listener() -> socket.socket:
+    private: Final = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    private.bind((RUST_HOP, 0))
+    private.listen(PRIVATE_BACKLOG)
+    return private
+
+
 async def _spawn(spec: ChildSpec) -> asyncio.subprocess.Process:
     return await asyncio.create_subprocess_exec(
         *spec.argv, env=dict(spec.env), pass_fds=spec.pass_fds, start_new_session=True
@@ -188,10 +194,10 @@ async def _drive(
 ) -> ExitCode:
     if isinstance(state, Finished):
         return state.code
-    following, action = step(state, await events.get())
-    if action is not None:
+    following, signals = step(state, await events.get())
+    for sent in signals:
         with contextlib.suppress(ProcessLookupError):
-            children[action.child].send_signal(action.signum)
+            children[sent.child].send_signal(sent.signum)
     return await _drive(following, events, children)
 
 
@@ -200,9 +206,7 @@ async def _supervise(binary: str, command: Sequence[str], server: PythonServer, 
     events: Final[asyncio.Queue[Event]] = asyncio.Queue()
     for signum in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(signum, events.put_nowait, Stop(signum))
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as private:
-        private.bind((RUST_HOP, 0))
-        private.listen()
+    with private_listener() as private:
         _, upstream_port = _ADDRESS.validate_python(private.getsockname())
         python: Final = await _spawn(python_spec(command, private.fileno(), upstream_port, server, environ))
         try:
